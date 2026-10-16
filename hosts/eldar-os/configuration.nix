@@ -32,7 +32,13 @@
     };
   };
 
-  programs.zsh.enable = true;
+  programs.zsh = {
+    enable = true;
+    # Users' zsh setup (oh-my-zsh: completion, prompt) comes from their
+    # dotfiles; don't run NixOS's versions first.
+    enableGlobalCompInit = false;
+    promptInit = "";
+  };
   users.users.ben = {
     isNormalUser = true;
     uid = 1000;
@@ -57,6 +63,10 @@
     users = [ "ben" ];
     commands = [{
       command = "/run/current-system/sw/bin/nixos-rebuild test --flake /home/ben/.cache/eldar-os-try\\#eldar-os";
+      options = [ "NOPASSWD" ];
+    } {
+      # same, with a local dotfiles checkout in place of the pinned one
+      command = "/run/current-system/sw/bin/nixos-rebuild test --flake /home/ben/.cache/eldar-os-try\\#eldar-os --override-input dotfiles /home/ben/.cache/eldar-os-try-dotfiles";
       options = [ "NOPASSWD" ];
     }];
   }];

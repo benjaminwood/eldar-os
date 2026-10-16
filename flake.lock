@@ -20,6 +20,23 @@
         "type": "github"
       }
     },
+    "dotfiles": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792193800,
+        "narHash": "sha256-d1Fwj1c8/5H3DKPY6gN2qyGUMbANYWf7zLVqyyuZmvQ=",
+        "owner": "benjaminwood",
+        "repo": "dotfiles",
+        "rev": "43b817c3527c83becac085f0af762ef3e9adc1a0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "benjaminwood",
+        "ref": "eldar-os",
+        "repo": "dotfiles",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1792030654,
@@ -39,6 +56,7 @@
     "root": {
       "inputs": {
         "disko": "disko",
+        "dotfiles": "dotfiles",
         "nixpkgs": "nixpkgs",
         "sops-nix": "sops-nix"
       }

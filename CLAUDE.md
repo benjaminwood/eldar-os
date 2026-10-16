@@ -56,6 +56,9 @@ may push to staging `main` directly; commits are signed with
    pushes and streams the machine's own apply. A failed health check rolls
    back on its own.
 3. Small, frequent commits are fine; they're rewritable until published.
+   Ben's preferences live in his dotfiles repo (decision 0006): try them
+   with `DOTFILES=~/projects/benjaminwood/dotfiles scripts/try`, push the
+   dotfiles commit, then `scripts/check --lock` to bump the pin.
 4. Don't stack blocking waits on long operations; check state directly.
 
 ## Working here
