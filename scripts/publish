@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Publish staging history to the public repo.
+#
+#   scripts/publish            publish staging main
+#   scripts/publish <commit>   publish up to <commit> (must be on staging main)
+#
+# Development happens in the private staging repo (remote `origin`); the
+# public repo (remote `public`) only ever receives a fast-forward of the same
+# commits. Before pushing, every commit not yet public is scanned for secrets
+# with gitleaks. If anything turns up, fix it by rewriting staging history
+# (allowed: it isn't public yet), never by a follow-up commit.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+GITLEAKS=zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
+
+git remote get-url public >/dev/null 2>&1 || { echo "no 'public' remote" >&2; exit 1; }
+git fetch -q origin
+git fetch -q public 2>/dev/null || true
+
+target=$(git rev-parse --verify "${1:-origin/main}^{commit}")
+git merge-base --is-ancestor "$target" origin/main \
+  || { echo "$target is not on staging main (push it to origin first)" >&2; exit 1; }
+
+if git rev-parse -q --verify public/main >/dev/null; then
+  git merge-base --is-ancestor public/main "$target" \
+    || { echo "public/main is not an ancestor of $target; refusing to rewrite public history" >&2; exit 1; }
+  range=public/main..$target
+else
+  range=$target   # first publish: everything
+fi
+
+count=$(git rev-list --count "$range")
+[ "$count" -gt 0 ] || { echo "nothing to publish"; exit 0; }
+echo "publishing $count commit(s):"
+git log --oneline "$range"
+
+echo; echo "scanning with gitleaks…"
+docker run --rm -v "$PWD:/repo" -w /repo "$GITLEAKS" \
+  git --no-banner --redact --log-opts="$range" /repo
+
+git push public "$target:refs/heads/main"
+echo "published $(git rev-parse --short "$target") to $(git remote get-url public)"

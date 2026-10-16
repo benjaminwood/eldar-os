@@ -7,9 +7,11 @@ tooling and config are brought over deliberately, redesigned where it helps.
 
 ## Intent: a reference, not a product
 
-The repo is private today but is written as if it may be published one day,
-**as an example to fork and adapt**, not something anyone runs directly from
-here. So:
+This repo is public (`benjaminwood/eldar-os`), **as an example to fork and
+adapt**, not something anyone runs directly from here. Work happens in the
+private staging repo (`eldar-os-staging`, remote `origin`), which Ben
+publishes from with `scripts/publish` (see `docs/publishing.md`). Staging is
+published eventually, in full, so treat every commit as public. So:
 
 - **In the repo:** infrastructure, architecture, tooling, modules, scripts,
   docs: the parts others could learn from.
@@ -34,6 +36,10 @@ If something had to be done by hand, it's written down with the exact command.
 
 ## Working here
 
+- Push to `origin` (staging) only. Never push to `public`; publishing is
+  Ben's call, via `scripts/publish`.
+- If something that shouldn't be public gets committed, rewrite staging
+  history before it's published. A follow-up commit doesn't remove it.
 - Disks are referred to by serial, never `/dev/nvmeXn1` (the names have swapped
   between boots on this machine).
 - Test against the dry-run VM (`scripts/vm --dry-run …`) before the real disk.

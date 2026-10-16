@@ -1,3 +1,6 @@
+# Lives in both the private staging repo and the public repo (see
+# docs/publishing.md); the same file behaves slightly differently in each.
+#
 # build: the system closure builds from flake.lock (every push and PR).
 # e2e:   the documented install reproduced end to end in a VM (scripts/e2e):
 #        installer ISO → disko → nixos-install → boot → scripts/verify.
@@ -30,6 +33,10 @@ jobs:
         run: nix build --print-build-logs .#nixosConfigurations.eldar-os.config.system.build.toplevel
 
   e2e:
+    # Runs by default (the public repo, forks). A repo can make it on-demand
+    # only by setting the Actions variable E2E=manual — the private staging
+    # repo does, to save its minutes; it runs here after each publish anyway.
+    if: vars.E2E != 'manual' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
