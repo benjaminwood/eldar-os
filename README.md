@@ -17,7 +17,8 @@ whole machine.
   - `install.sh` — runs inside the installer: disko + nixos-install
   - `verify` — checks a booted system
   - `e2e` — the whole documented install, unattended, against a disk image
-  - `check` — build the working tree in the VM and diff it, before pushing
+  - `try` — activate the working tree in the VM now, uncommitted
+  - `check` — build the working tree in the VM and diff it, without activating
   - `apply` — push and have the machine apply now, streaming its log
   - `host-tools` — pinned sops and age for the admin host
   - `deploy` — bootstrap only: copy the tree to the VM and switch as root

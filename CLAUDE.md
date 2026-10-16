@@ -48,11 +48,15 @@ allowed key (`docs/decisions/0005-apply-loop.md`). Claude in Ben's admin session
 may push to staging `main` directly; commits are signed with
 `~/.ssh/eldar-os-signing` (configured in this repo's git config).
 
-1. Edit, then `scripts/check`: builds in the VM as ben and diffs against the
-   running system (`--lock` after adding or bumping an input).
-2. Commit (signed automatically), then `scripts/apply`: pushes and streams the
-   machine's apply. A failed health check rolls back on its own.
+1. Edit, then `scripts/try` (~7 s): activates the working tree in the VM,
+   uncommitted, with `nixos-rebuild test`; the boot default stays the last
+   applied main. Iterate here. (`scripts/check` builds and diffs without
+   activating; `scripts/check --lock` after adding or bumping an input.)
+2. When it's right, commit (signed automatically) and `scripts/apply` (~11 s):
+   pushes and streams the machine's own apply. A failed health check rolls
+   back on its own.
 3. Small, frequent commits are fine; they're rewritable until published.
+4. Don't stack blocking waits on long operations; check state directly.
 
 ## Working here
 

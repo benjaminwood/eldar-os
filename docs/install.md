@@ -153,9 +153,9 @@ public half is in `trust/allowed_signers`.
 ## Changing the system
 
 ```bash
-scripts/check             # build the working tree in the VM, diff vs. running
+scripts/try               # activate the working tree now, uncommitted (~7 s)
 git commit                # signed
-scripts/apply             # push; the machine verifies, applies, health-checks
+scripts/apply             # push; the machine verifies, applies, health-checks (~11 s)
 ```
 
 ## Booting on bare metal
