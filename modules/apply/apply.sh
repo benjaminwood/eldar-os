@@ -60,9 +60,9 @@ failed_before=$(systemctl list-units --state=failed --plain --no-legend | cut -d
 log "activating $new"
 "$new/bin/switch-to-configuration" test || rollback "activation reported errors"
 
-# Let the jobs activation queued finish, then check.
+# Let the jobs activation queued finish (ignoring our own start job), then check.
 # shellcheck disable=SC2016  # expanded by the inner bash
-timeout 120 bash -c 'while [ -n "$(systemctl list-jobs --no-legend)" ]; do sleep 1; done' || true
+timeout 120 bash -c 'while systemctl list-jobs --no-legend | grep -qv " eldar-os-apply.service "; do sleep 0.2; done' || true
 failed_after=$(systemctl list-units --state=failed --plain --no-legend | cut -d' ' -f1 | sort)
 new_failures=$(comm -13 <(echo "$failed_before") <(echo "$failed_after") | grep . || true)
 [ -z "$new_failures" ] || rollback "units failed: $(echo "$new_failures" | tr '\n' ' ')"

@@ -1,4 +1,4 @@
-# 0004. Secrets: sops-nix for the machine, 1Password for the proxy
+# 0004. Secrets: sops-nix for the machine, 1Password for the supervisor
 
 Accepted, 2026-10-16
 
@@ -6,8 +6,8 @@ Accepted, 2026-10-16
 
 Two kinds of secret: ones the machine needs to run at all (deploy keys,
 password hashes, network auth), and the credentials an agent's actions use,
-which a privileged proxy hands out per request with approval. The repo is
-public, so neither can live in it, even encrypted.
+which a privileged service, the **supervisor**, hands out per request with
+approval. The repo is public, so neither can live in it, even encrypted.
 
 ## Decision
 
@@ -16,8 +16,8 @@ public, so neither can live in it, even encrypted.
   in 1Password) and by the machine's SSH host key. The machine fetches it on
   each apply and decrypts at activation. The flake doesn't reference the
   private repo, so the public config builds without it.
-- **Proxy-held credentials: 1Password at runtime**, as the current proxy does.
-  Not built yet.
+- **Supervisor-held credentials: 1Password at runtime**, as the credential
+  proxy in the current Docker setup does. Not built yet.
 - **Deploy keys are generated on the machine** and only their public halves are
   registered with GitHub, so they never leave it.
 
