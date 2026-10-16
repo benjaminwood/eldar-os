@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Apply this working tree to the VM right now, uncommitted: the fast inner
+# loop. Uses `nixos-rebuild test`, so the boot default stays the last applied
+# staging main, and a reboot (or the next scripts/apply) returns to it.
+#
+#   scripts/try              build, activate, show what changed
+#   DRY_RUN=1 scripts/try    against the dry-run VM
+#
+# When it's right: commit, then scripts/apply (already built, so quick).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+VM="scripts/vm${DRY_RUN:+ --dry-run}"
+DIR=/home/ben/.cache/eldar-os-try   # must match the sudo rule in hosts/eldar-os/configuration.nix
+
+git ls-files -co --exclude-standard | tar -cf - -T - \
+  | $VM ssh "rm -rf $DIR && mkdir -p $DIR && tar -xf - -C $DIR"
+
+$VM ssh "set -e; before=\$(readlink -f /run/current-system)
+  sudo /run/current-system/sw/bin/nixos-rebuild test --flake $DIR#eldar-os 2>&1 | grep -vE '^(building|copying|evaluating)'
+  nix store diff-closures \"\$before\" /run/current-system"

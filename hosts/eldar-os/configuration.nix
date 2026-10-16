@@ -48,6 +48,18 @@
   # exists.
   security.sudo.wheelNeedsPassword = false;
 
+  # scripts/try: ben may *activate* (not make the boot default) a config from
+  # his scratch dir without a password: the admin's fast inner loop. Root-
+  # equivalent for ben, who is the admin anyway; agents run as other users and
+  # only get changes applied through signed main (docs/decisions/0005).
+  security.sudo.extraRules = [{
+    users = [ "ben" ];
+    commands = [{
+      command = "/run/current-system/sw/bin/nixos-rebuild test --flake /home/ben/.cache/eldar-os-try\\#eldar-os";
+      options = [ "NOPASSWD" ];
+    }];
+  }];
+
   environment.systemPackages = with pkgs; [ git vim curl rsync btrfs-progs cryptsetup ];
 
   zramSwap.enable = true;
