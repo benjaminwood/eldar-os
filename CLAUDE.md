@@ -64,6 +64,10 @@ may push to staging `main` directly; commits are signed with
   Ben's call, via `scripts/publish`.
 - If something that shouldn't be public gets committed, rewrite staging
   history before it's published. A follow-up commit doesn't remove it.
+- Any secret generated for this system that would need restoring (keys,
+  keyfiles, tokens) is backed up right away to the admin's 1Password vault,
+  with a note on what it is, where it lives and how to replace it. Values go
+  through pipes, never into output or argv.
 - Disks are referred to by serial, never `/dev/nvmeXn1` (the names have swapped
   between boots on this machine).
 - Test against the dry-run VM (`scripts/vm --dry-run …`) before the real disk.
