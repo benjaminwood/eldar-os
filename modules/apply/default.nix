@@ -109,6 +109,15 @@ in
     programs.ssh.knownHosts."github.com".publicKey =
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
 
+    # GitHub SSH over port 443 (its documented fallback): port 22 is blocked on
+    # some networks, including this machine's at times. Same host key.
+    programs.ssh.extraConfig = ''
+      Host github.com
+        HostName ssh.github.com
+        Port 443
+        HostKeyAlias github.com
+    '';
+
     security.polkit.extraConfig = lib.mkIf (cfg.triggerUsers != [ ]) ''
       polkit.addRule(function(action, subject) {
         if (action.id == "org.freedesktop.systemd1.manage-units" &&
