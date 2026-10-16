@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Evaluate and build this working tree inside the VM, as ben (no root), and
+# show what would change against the running system. Catches mistakes before
+# a push; the build lands in the VM's store, so the real apply is quick.
+#
+#   scripts/check            build and diff
+#   scripts/check --lock     also update flake.lock for new/changed inputs
+#                            (copied back here)
+#   DRY_RUN=1 scripts/check  against the dry-run VM
+set -euo pipefail
+cd "$(dirname "$0")/.."
+VM="scripts/vm${DRY_RUN:+ --dry-run}"
+DIR=.cache/eldar-os-check
+
+git ls-files -co --exclude-standard | tar -cf - -T - \
+  | $VM ssh "rm -rf ~/$DIR && mkdir -p ~/$DIR && tar -xf - -C ~/$DIR"
+
+if [ "${1:-}" = --lock ]; then
+  $VM ssh "cd ~/$DIR && nix flake lock path:."
+  $VM ssh "cat ~/$DIR/flake.lock" > flake.lock.new && mv flake.lock.new flake.lock
+  git diff --stat flake.lock
+fi
+
+$VM ssh "cd ~/$DIR && out=\$(nix build --no-link --print-out-paths path:.#nixosConfigurations.eldar-os.config.system.build.toplevel) \
+  && nix store diff-closures /run/current-system \"\$out\" && echo \"check ok: \$out\""

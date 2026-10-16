@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Install the pinned admin tools the host needs (no root, no Nix on the host):
+# sops and age, into ~/.local/share/eldar-os-vm/bin. Prints that dir; put it
+# on PATH or call the binaries by path.
+#
+# sops' hash matches upstream's checksums file. age publishes no plain
+# checksum file (only a transparency-log proof), so its hash was recorded on
+# first download.
+set -euo pipefail
+
+BIN=${ELDAR_OS_VM_STATE:-$HOME/.local/share/eldar-os-vm}/bin
+SOPS_VERSION=v3.13.3
+SOPS_SHA256=e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+AGE_VERSION=v1.3.2
+AGE_SHA256=cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+
+mkdir -p "$BIN"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+
+if ! "$BIN/sops" --version 2>/dev/null | grep -q "${SOPS_VERSION#v}"; then
+  curl -fsSL -o "$tmp/sops" "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+  echo "$SOPS_SHA256  $tmp/sops" | sha256sum -c --quiet
+  install -m 755 "$tmp/sops" "$BIN/sops"
+fi
+
+if ! "$BIN/age" --version 2>/dev/null | grep -q "${AGE_VERSION}"; then
+  curl -fsSL -o "$tmp/age.tgz" "https://github.com/FiloSottile/age/releases/download/$AGE_VERSION/age-$AGE_VERSION-linux-amd64.tar.gz"
+  echo "$AGE_SHA256  $tmp/age.tgz" | sha256sum -c --quiet
+  tar -xzf "$tmp/age.tgz" -C "$tmp"
+  install -m 755 "$tmp/age/age" "$tmp/age/age-keygen" "$BIN/"
+fi
+
+echo "$BIN"

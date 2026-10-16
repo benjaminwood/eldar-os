@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Push main to staging and have the machine apply it now, streaming its log.
+# The machine also polls every 2 min, so pushes (and PRs merged on GitHub)
+# get applied on their own; this just doesn't wait, and shows the result.
+#
+#   scripts/apply
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+[ "$(git branch --show-current)" = main ] || { echo "not on main" >&2; exit 1; }
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "uncommitted changes" >&2; exit 1; }
+git fetch -q origin
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+  git push -q origin main
+  echo "pushed $(git rev-parse --short HEAD)"
+fi
+
+scripts/vm ssh 'journalctl -fu eldar-os-apply -n0 -o cat & j=$!
+  systemctl start eldar-os-apply.service; rc=$?
+  sleep 1; kill $j
+  echo "result: $(systemctl show eldar-os-apply.service -p Result --value)"
+  exit $rc'

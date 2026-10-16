@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# One-time: hook a freshly installed machine up to the apply loop
+# (docs/decisions/0004-secrets.md, 0005-apply-loop.md). Idempotent.
+#
+#   scripts/enroll
+#
+# 1. The machine generates its own read-only deploy keys; their public halves
+#    are registered on the staging and secrets repos (via gh).
+# 2. Prints the machine's age recipient (from its SSH host key). If it's new,
+#    add it to the secrets repo's .sops.yaml and run `sops updatekeys`, then
+#    re-run this.
+# 3. Clones the secrets repo on the machine and switches to this checkout
+#    (scripts/deploy) to install the apply service. From then on, changes
+#    arrive through staging main (scripts/apply).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+VM=scripts/vm
+STAGING=benjaminwood/eldar-os-staging
+SECRETS=benjaminwood/eldar-os-secrets
+GITHUB_HOST_KEY="github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+
+echo "== deploy keys"
+for r in staging secrets; do
+  pub=$($VM ssh "sudo install -d -m 700 /var/lib/eldar-os/deploy-keys
+    k=/var/lib/eldar-os/deploy-keys/$r
+    sudo test -f \$k || sudo ssh-keygen -q -t ed25519 -N '' -C 'eldar-os machine: read $r' -f \$k
+    sudo cut -d' ' -f1,2 \$k.pub")
+  repo=$([ $r = staging ] && echo $STAGING || echo $SECRETS)
+  if gh repo deploy-key list -R "$repo" | grep -qF "$pub"; then
+    echo "$repo: already registered"
+  else
+    gh repo deploy-key add <(echo "$pub") -R "$repo" -t "eldar-os machine (read-only)"
+    echo "$repo: registered"
+  fi
+done
+
+echo "== age recipient"
+recipient=$($VM ssh 'nix --extra-experimental-features "nix-command flakes" run --inputs-from /etc/eldar-os nixpkgs#ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub' 2>/dev/null)
+echo "$recipient"
+if ! gh api "repos/$SECRETS/contents/.sops.yaml" --jq .content | base64 -d | grep -qF "$recipient"; then
+  echo "Not a recipient in $SECRETS yet: add it to .sops.yaml, run 'sops updatekeys eldar-os.yaml', push, and re-run." >&2
+  exit 1
+fi
+
+echo "== secrets checkout"
+$VM ssh "kh=\$(mktemp); echo '$GITHUB_HOST_KEY' > \$kh
+  sudo test -d /var/lib/eldar-os/secrets/.git || sudo GIT_SSH_COMMAND=\"ssh -i /var/lib/eldar-os/deploy-keys/secrets -o IdentitiesOnly=yes -o UserKnownHostsFile=\$kh -o StrictHostKeyChecking=yes\" \
+    git clone -q git@github.com:$SECRETS.git /var/lib/eldar-os/secrets
+  rm \$kh; sudo git -C /var/lib/eldar-os/secrets log -1 --format='secrets at %h'"
+
+echo "== install the apply service"
+scripts/deploy switch
+echo "enrolled. From now on: commit, then scripts/apply."

@@ -26,6 +26,8 @@ findmnt -no OPTIONS / | grep -q compress=zstd || fail "no zstd compression on /"
 [ "$(findmnt -no FSTYPE /boot)" = vfat ] || fail "/boot is not the ESP"
 sudo test -f /boot/EFI/BOOT/BOOTX64.EFI || fail "no fallback bootloader"; ok "fallback bootloader"
 
+[ "$(sudo cat /run/secrets/canary 2>/dev/null)" = secrets-pipeline-ok ] || fail "secrets canary not decrypted"; ok "secrets decrypt"
+
 log=$(sudo journalctl -b -o cat)
 grep -q 'Found device /dev/disk/by-id/virtio-lukskey' <<<"$log" || fail "initrd never saw the key disk"
 grep -q 'Timed out waiting for device /dev/disk/by-id/virtio-lukskey' <<<"$log" \

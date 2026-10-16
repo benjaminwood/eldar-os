@@ -16,8 +16,8 @@ published eventually, in full, so treat every commit as public. So:
 - **In the repo:** infrastructure, architecture, tooling, modules, scripts,
   docs: the parts others could learn from.
 - **Not in the repo:** anything deeply personal: secrets and credentials (even
-  encrypted ones, until we pick a secrets approach that's designed for it),
-  personal data, Eldar's memory, persona and Claude sessions, contents of
+  encrypted ones; they go in the private `eldar-os-secrets` repo, see
+  `docs/decisions/0004-secrets.md`), personal data, Eldar's memory, persona and Claude sessions, contents of
   private work projects, email addresses, internal hostnames and account IDs
   beyond what the config strictly needs.
 - **Machine-specific facts** (disk serial, hardware, hostname, public SSH keys)
@@ -34,6 +34,26 @@ Every step, including the install itself, is a script or declarative config
 here, documented in `docs/install.md`, with inputs pinned in `flake.lock`.
 If something had to be done by hand, it's written down with the exact command.
 
+## Decisions
+
+Choices that shape the system get a short record in `docs/decisions/`
+(see 0001): what, why, and the cost, in a few paragraphs a person reads in a
+minute. Check them before changing anything security-related, link to them
+from code that exists because of one, and supersede rather than rewrite.
+
+## Changing the system
+
+The machine applies staging `main` itself, and only if the tip is signed by an
+allowed key (`docs/decisions/0005-apply-loop.md`). Claude in Ben's admin session
+may push to staging `main` directly; commits are signed with
+`~/.ssh/eldar-os-signing` (configured in this repo's git config).
+
+1. Edit, then `scripts/check`: builds in the VM as ben and diffs against the
+   running system (`--lock` after adding or bumping an input).
+2. Commit (signed automatically), then `scripts/apply`: pushes and streams the
+   machine's apply. A failed health check rolls back on its own.
+3. Small, frequent commits are fine; they're rewritable until published.
+
 ## Working here
 
 - Push to `origin` (staging) only. Never push to `public`; publishing is
@@ -43,5 +63,5 @@ If something had to be done by hand, it's written down with the exact command.
 - Disks are referred to by serial, never `/dev/nvmeXn1` (the names have swapped
   between boots on this machine).
 - Test against the dry-run VM (`scripts/vm --dry-run …`) before the real disk.
-- `security.sudo.wheelNeedsPassword = false` is bootstrap-only and must be
-  removed before cutover.
+- `security.sudo.wheelNeedsPassword = false` is bootstrap-only and goes once
+  Ben's password is a secret.

@@ -133,10 +133,29 @@ scripts/vm ssh -t 'sudo cryptsetup luksAddKey /dev/disk/by-partlabel/disk-main-l
 To see the bare-metal prompt without leaving the VM: `NO_KEY=1 scripts/vm start`
 and look at VNC (`127.0.0.1:5900`).
 
+## 8. Enroll: the machine applies its own config from here on
+
+```bash
+scripts/host-tools        # pinned sops + age on the admin host
+scripts/enroll
+```
+
+The machine generates read-only deploy keys for the staging and secrets repos
+(their public halves are registered via `gh`), and its age recipient (from its
+SSH host key) must be in the secrets repo's `.sops.yaml`; `enroll` says so if
+it isn't. It then clones the secrets repo on the machine and installs the
+apply service with one last direct switch. See decisions 0004 and 0005.
+
+The admin host needs an age key at `~/.config/sops/age/keys.txt`
+(`age-keygen -o`, backed up in 1Password) and a commit-signing key whose
+public half is in `trust/allowed_signers`.
+
 ## Changing the system
 
 ```bash
-scripts/deploy            # copies the repo to /etc/eldar-os, nixos-rebuild switch
+scripts/check             # build the working tree in the VM, diff vs. running
+git commit                # signed
+scripts/apply             # push; the machine verifies, applies, health-checks
 ```
 
 ## Booting on bare metal
