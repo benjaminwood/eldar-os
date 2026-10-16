@@ -1,0 +1,74 @@
+# build: the system closure builds from flake.lock (every push and PR).
+# e2e:   the documented install reproduced end to end in a VM (scripts/e2e):
+#        installer ISO → disko → nixos-install → boot → scripts/verify.
+#        Nightly as well, so external drift (ISO URL, caches, GitHub) shows up
+#        even when nothing here changed.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 10 * * *"   # daily, 03:17 Pacific
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - name: flake check
+        run: nix flake check --no-build
+      - name: build system
+        run: nix build --print-build-logs .#nixosConfigurations.eldar-os.config.system.build.toplevel
+
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VM_CPUS: 2
+      VM_MEM: 5G
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm-ci.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: host setup
+        run: sudo bash scripts/host-setup.sh --dry-run
+
+      - name: systemd user manager
+        # scripts/vm runs QEMU as a systemd user unit; runners have no login
+        # session, so start a lingering user manager.
+        run: |
+          sudo loginctl enable-linger "$USER"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          timeout 60 bash -c 'until [ -S /run/user/$(id -u)/bus ]; do sleep 1; done'
+
+      - name: cache installer ISO
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/eldar-os-vm/iso/nixos-minimal.iso
+          key: iso-${{ hashFiles('scripts/fetch-iso') }}
+
+      - name: install and verify
+        run: scripts/e2e
+
+      - name: serial log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: serial-log
+          path: ~/.local/share/eldar-os-vm/dry-run/serial.log

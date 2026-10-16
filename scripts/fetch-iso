@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Download the pinned NixOS installer ISO and verify its checksum.
+# Built from the same nixpkgs commit as flake.lock, so the install mostly
+# reuses what's already on the ISO. Bump all three together.
+set -euo pipefail
+
+URL=https://releases.nixos.org/nixos/26.05/nixos-26.05.11985.26f4107e47e3/nixos-minimal-26.05.11985.26f4107e47e3-x86_64-linux.iso
+SHA256=691ce212d0803d9341ed28c11cdfd46083c19bac063dc553bb6d1aa2736e918f
+
+DIR=${ELDAR_OS_VM_STATE:-$HOME/.local/share/eldar-os-vm}/iso
+ISO=$DIR/nixos-minimal.iso
+mkdir -p "$DIR"
+
+if [ -e "$ISO" ] && echo "$SHA256  $ISO" | sha256sum -c --quiet 2>/dev/null; then
+  echo "iso: $ISO (already present, checksum ok)"; exit 0
+fi
+curl -fL --retry 3 -o "$ISO.part" "$URL"
+echo "$SHA256  $ISO.part" | sha256sum -c --quiet
+mv "$ISO.part" "$ISO"
+echo "iso: $ISO (checksum ok)"

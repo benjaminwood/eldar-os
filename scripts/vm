@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Run eldar-os as a QEMU/KVM VM on the old Ubuntu host, straight off the
+# physical target disk. Runs unprivileged (needs scripts/host-setup.sh once).
+#
+#   scripts/vm keygen     create the LUKS key disk (once; never overwrites)
+#   scripts/vm install    boot the NixOS installer ISO, target disk attached
+#   scripts/vm start      boot eldar-os from the target disk
+#                         (NO_KEY=1: without the key disk, as on bare metal)
+#   scripts/vm stop       ACPI shutdown (scripts/vm kill to force)
+#   scripts/vm status     is it running
+#   scripts/vm console    attach to the serial console (Ctrl-] to leave)
+#   scripts/vm log        tail the serial log
+#   scripts/vm authorize  installer only: put our SSH key in via the serial console
+#   scripts/vm ssh [cmd]  ssh in as ben (VM_USER=nixos while in the installer)
+#
+#   scripts/vm --dry-run <cmd>
+#                         same, against a sparse disk image the size of the
+#                         real disk, with its own key, unit, ports and firmware
+#                         vars. The physical disk is never attached.
+#   scripts/vm --dry-run reset
+#                         delete the dry-run disk image and firmware vars
+#
+# The VM runs as the systemd user unit `eldar-os-vm` (`eldar-os-vm-dry` for a
+# dry run), so it outlives the shell that started it. Never run it while the
+# host has the target disk mounted.
+set -euo pipefail
+
+SERIAL=S5H7NC0MB49704F
+DISK_BYTES=500107862016
+BASE=${ELDAR_OS_VM_STATE:-$HOME/.local/share/eldar-os-vm}
+ISO=$BASE/iso/nixos-minimal.iso
+OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
+OVMF_VARS_TEMPLATE=/usr/share/OVMF/OVMF_VARS_4M.fd
+SSH_KEY=$HOME/.ssh/eldar-os-vm
+CPUS=${VM_CPUS:-8}
+MEM=${VM_MEM:-12G}
+
+if [ "${1:-}" = --dry-run ]; then
+  shift
+  DRY_RUN=1
+  STATE=$BASE/dry-run
+  DISK=$STATE/disk.raw
+  UNIT=eldar-os-vm-dry
+  SSH_PORT=2223
+  VNC=1
+else
+  DRY_RUN=
+  STATE=$BASE
+  DISK=/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_500GB_${SERIAL}
+  UNIT=eldar-os-vm
+  SSH_PORT=2222
+  VNC=0
+fi
+KEYIMG=$STATE/luks-key.img
+VARS=$STATE/OVMF_VARS.fd
+
+die() { echo "vm: $*" >&2; exit 1; }
+running() { systemctl --user is-active --quiet "$UNIT"; }
+
+# Processes started before host-setup.sh added ben to `kvm` (this shell, the
+# systemd user manager) don't have the group yet; `sg` picks it up from
+# /etc/group without a re-login.
+KVM_WRAP=()
+if ! { [ -r /dev/kvm ] && [ -w /dev/kvm ]; }; then
+  if id -nG "$USER" | tr ' ' '\n' | grep -qx kvm || getent group kvm | cut -d: -f4 | tr ',' '\n' | grep -qx "$USER"; then
+    KVM_WRAP=(sg kvm -c)
+  fi
+fi
+
+check_disk() {
+  [ -w /dev/kvm ] || [ ${#KVM_WRAP[@]} -gt 0 ] || die "no access to /dev/kvm (run scripts/host-setup.sh)"
+  if [ "$DRY_RUN" ]; then
+    [ -e "$DISK" ] || { truncate -s "$DISK_BYTES" "$DISK"; echo "created sparse $DISK"; }
+    [ "$(stat -c %s "$DISK")" = "$DISK_BYTES" ] || die "size mismatch on $DISK"
+    return
+  fi
+  local real
+  real=$(readlink -f "$DISK") || die "target disk $DISK not found"
+  [ "$(udevadm info -q property "$real" | sed -n 's/^ID_SERIAL_SHORT=//p')" = "$SERIAL" ] || die "serial mismatch on $real"
+  [ "$(lsblk -bdno SIZE "$real")" = "$DISK_BYTES" ] || die "size mismatch on $real"
+  ! lsblk -no MOUNTPOINTS "$real" | grep -q . || die "$real is mounted on the host"
+  [ -r "$real" ] && [ -w "$real" ] || die "no access to $real (run scripts/host-setup.sh)"
+}
+
+keygen() {
+  mkdir -p "$STATE"; chmod 700 "$STATE"
+  [ -e "$KEYIMG" ] && die "$KEYIMG already exists; refusing to overwrite (it unlocks the disk)"
+  ( umask 077
+    truncate -s 1M "$KEYIMG"
+    openssl rand -hex 32 | tr -d '\n' | dd of="$KEYIMG" conv=notrunc status=none )
+  echo "created $KEYIMG (64-byte key at offset 0). Back it up somewhere safe."
+}
+
+BOOT=$BASE/iso/boot
+extract_installer() {
+  [ "$BOOT/.from" -nt "$ISO" ] 2>/dev/null && return
+  command -v 7z >/dev/null || die "7z not found (apt install 7zip)"
+  rm -rf "$BOOT"; mkdir -p "$BOOT"
+  7z e -y -o"$BOOT" "$ISO" EFI/BOOT/grub.cfg >/dev/null
+  local kernel initrd cmdline
+  read -r kernel cmdline < <(awk '$1 == "linux" { $1 = ""; print; exit }' "$BOOT/grub.cfg")
+  initrd=$(awk '$1 == "initrd" { print $2; exit }' "$BOOT/grub.cfg")
+  cmdline=${cmdline//\$\{isoboot\}/}
+  kernel=$(echo "${kernel#/}" | tr -s /); initrd=$(echo "${initrd#/}" | tr -s /)
+  7z e -y -o"$BOOT" "$ISO" "$kernel" "$initrd" >/dev/null
+  [ -s "$BOOT/bzImage" ] && [ -s "$BOOT/initrd" ] || die "could not extract kernel/initrd from $ISO"
+  echo "$cmdline" > "$BOOT/cmdline"
+  touch "$BOOT/.from"
+}
+
+launch() {  # $1 = install|start
+  running && die "already running"
+  mkdir -p "$STATE"; chmod 700 "$STATE"
+  check_disk
+  [ -e "$KEYIMG" ] || die "no key disk; run: scripts/vm ${DRY_RUN:+--dry-run }keygen"
+  [ -e "$VARS" ] || { install -m 600 "$OVMF_VARS_TEMPLATE" "$VARS"; }
+  rm -f "$STATE/serial.sock" "$STATE/monitor.sock"
+
+  local args=(
+    -name eldar-os -machine q35,accel=kvm -cpu host -smp "$CPUS" -m "$MEM"
+    -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE"
+    -drive "if=pflash,format=raw,file=$VARS"
+    -drive "file=$DISK,format=raw,if=none,id=root,cache=none,aio=io_uring,discard=unmap"
+    -device virtio-blk-pci,drive=root,serial=eldar-os-root,bootindex=1
+    -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22"
+    -device virtio-net-pci,netdev=n0
+    -chardev "socket,id=ser0,path=$STATE/serial.sock,server=on,wait=off,logfile=$STATE/serial.log"
+    -serial chardev:ser0
+    -monitor "unix:$STATE/monitor.sock,server=on,wait=off"
+    -vga virtio -display "vnc=127.0.0.1:$VNC"
+  )
+  # NO_KEY=1 leaves the key disk off, like bare metal: the initrd waits 5 s for
+  # it, then asks for a passphrase on the display (VNC).
+  if [ -z "${NO_KEY:-}" ]; then
+    args+=(-drive "file=$KEYIMG,format=raw,if=none,id=key,readonly=on" -device virtio-blk-pci,drive=key,serial=lukskey)
+  fi
+  if [ "$1" = install ]; then
+    # Boot the ISO's kernel directly (still via the UEFI firmware) with the
+    # first GRUB entry's command line plus a serial console, so the installer
+    # is reachable headless without driving GRUB's graphical menu.
+    [ -e "$ISO" ] || die "no installer ISO at $ISO (see docs/install.md)"
+    extract_installer
+    args+=(-drive "file=$ISO,media=cdrom,if=none,id=cd,readonly=on" -device ide-cd,drive=cd)
+    args+=(-kernel "$BOOT/bzImage" -initrd "$BOOT/initrd" -append "$(cat "$BOOT/cmdline") console=ttyS0,115200n8")
+  fi
+  : > "$STATE/serial.log"
+  local cmd=(qemu-system-x86_64 "${args[@]}")
+  if [ ${#KVM_WRAP[@]} -gt 0 ]; then
+    cmd=("${KVM_WRAP[@]}" "exec $(printf '%q ' "${cmd[@]}")")
+  fi
+  systemd-run --user --unit="$UNIT" --collect --quiet "${cmd[@]}"
+  echo "started ($1${DRY_RUN:+, dry run}). serial: console | log: log | display: vnc 127.0.0.1:$((5900 + VNC))"
+}
+
+reset() {
+  [ "$DRY_RUN" ] || die "reset only applies to --dry-run"
+  running && die "stop it first"
+  rm -f "$DISK" "$VARS" "$STATE/serial.log"
+  echo "dry-run disk and firmware vars removed (key kept)"
+}
+
+monitor() { echo "$1" | socat - "UNIX-CONNECT:$STATE/monitor.sock" >/dev/null; }
+
+case "${1:-}" in
+  keygen) keygen ;;
+  install|start) launch "$1" ;;
+  reset) reset ;;
+  authorize)  # installer only: type our SSH key into the auto-logged-in serial shell
+    timeout 300 bash -c "until grep -aq 'nixos@nixos' '$STATE/serial.log' 2>/dev/null; do sleep 2; done" \
+      || die "installer shell never appeared on serial"
+    printf 'mkdir -p ~/.ssh && echo %q > ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys\r' "$(cat "$SSH_KEY.pub")" \
+      | socat - "UNIX-CONNECT:$STATE/serial.sock"
+    for _ in $(seq 20); do VM_USER=nixos "$0" ${DRY_RUN:+--dry-run} ssh true 2>/dev/null && { echo "ssh ok"; exit 0; }; sleep 1; done
+    die "ssh as nixos still failing" ;;
+  stop) running || die "not running"; monitor system_powerdown; echo "shutdown requested" ;;
+  kill) systemctl --user stop "$UNIT" ;;
+  status) systemctl --user --no-pager status "$UNIT" | head -5 || true ;;
+  console) exec socat -,raw,echo=0,escape=0x1d "UNIX-CONNECT:$STATE/serial.sock" ;;
+  log) exec tail -n 50 -f "$STATE/serial.log" ;;
+  ssh) shift; user=ben; [ "${VM_USER:-}" ] && user=$VM_USER
+       exec ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$user@127.0.0.1" "$@" ;;
+  *) sed -n '2,24p' "$0"; exit 1 ;;
+esac

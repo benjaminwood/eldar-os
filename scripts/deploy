@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Push this repo to the running eldar-os VM and switch to it.
+#
+#   scripts/deploy            nixos-rebuild switch
+#   scripts/deploy test       activate without making it the boot default
+#   scripts/deploy boot       make it the boot default without activating
+#
+#   DRY_RUN=1 scripts/deploy  target the dry-run VM (scripts/vm --dry-run)
+#
+# Bootstrap-era tool: the long-term path is PR → merge → the host pulls main.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ACTION=${1:-switch}
+VM="scripts/vm${DRY_RUN:+ --dry-run}"
+
+tar --exclude=.git -cf - . | $VM ssh 'sudo rm -rf /etc/eldar-os.new && sudo mkdir /etc/eldar-os.new && sudo tar -xf - -C /etc/eldar-os.new && sudo rm -rf /etc/eldar-os && sudo mv /etc/eldar-os.new /etc/eldar-os'
+$VM ssh -t "sudo nixos-rebuild $ACTION --flake /etc/eldar-os#eldar-os"

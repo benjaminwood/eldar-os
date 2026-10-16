@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Check a booted eldar-os over SSH. Exits non-zero on the first failure.
+#
+#   scripts/verify            the VM on the real disk
+#   scripts/verify --dry-run  the dry-run VM
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+scripts/vm "$@" ssh 'bash -s' <<'EOF'
+set -euo pipefail
+fail() { echo "FAIL: $*" >&2; exit 1; }
+ok() { echo "ok: $*"; }
+
+[ "$(hostname)" = eldar-os ] || fail "hostname is $(hostname)"; ok hostname
+
+state=$(systemctl is-system-running --wait || true)
+[ "$state" = running ] || { systemctl --failed --no-pager; fail "system is $state"; }; ok "system running"
+
+for m in /:@root /home:@home /nix:@nix /var/log:@log /.snapshots:@snapshots; do
+  src=$(findmnt -no SOURCE "${m%%:*}")
+  [ "$src" = "/dev/mapper/cryptroot[/${m#*:}]" ] || fail "${m%%:*} is mounted from $src"
+done; ok "btrfs subvolumes on LUKS"
+
+findmnt -no OPTIONS / | grep -q compress=zstd || fail "no zstd compression on /"; ok compression
+
+[ "$(findmnt -no FSTYPE /boot)" = vfat ] || fail "/boot is not the ESP"
+sudo test -f /boot/EFI/BOOT/BOOTX64.EFI || fail "no fallback bootloader"; ok "fallback bootloader"
+
+log=$(sudo journalctl -b -o cat)
+grep -q 'Found device /dev/disk/by-id/virtio-lukskey' <<<"$log" || fail "initrd never saw the key disk"
+grep -q 'Timed out waiting for device /dev/disk/by-id/virtio-lukskey' <<<"$log" \
+  && fail "LUKS was unlocked by passphrase, not the key disk"; ok "unlocked by key disk"
+EOF

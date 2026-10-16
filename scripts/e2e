@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# End-to-end reproduction of the documented install (docs/install.md), against
+# the dry-run disk image: fetch the ISO, boot the installer, install from this
+# checkout, boot the result, verify it. Never touches the physical disk.
+# Runs locally and in CI (.github/workflows/ci.yml).
+#
+#   scripts/e2e
+set -euo pipefail
+cd "$(dirname "$0")/.."
+VM="scripts/vm --dry-run"
+STATE=${ELDAR_OS_VM_STATE:-$HOME/.local/share/eldar-os-vm}/dry-run
+
+step() { echo; echo "=== $* ($(date +%T))"; }
+trap 'status=$?; if [ $status -ne 0 ]; then echo "--- serial log tail"; tail -c 4000 "$STATE/serial.log" 2>/dev/null | tr -cd "[:print:]\n"; fi; $VM kill 2>/dev/null || true' EXIT
+
+step "ssh key"
+[ -f ~/.ssh/eldar-os-vm ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/eldar-os-vm
+
+step "installer iso"
+scripts/fetch-iso
+
+step "clean dry-run disk"
+$VM kill 2>/dev/null || true
+$VM reset
+[ -e "$STATE/luks-key.img" ] || $VM keygen
+
+step "boot installer"
+$VM install
+$VM authorize
+
+step "install"
+git ls-files -co --exclude-standard | tar -cf - -T - | VM_USER=nixos $VM ssh 'rm -rf eldar-os && mkdir eldar-os && tar -xf - -C eldar-os'
+VM_USER=nixos $VM ssh 'sudo bash eldar-os/scripts/install.sh'
+
+step "boot installed system"
+$VM kill
+$VM start
+timeout 300 bash -c "until grep -aq 'eldar-os login:' '$STATE/serial.log'; do sleep 3; done"
+
+step "verify"
+for _ in $(seq 30); do $VM ssh true 2>/dev/null && break; sleep 2; done
+scripts/verify --dry-run
+
+step "passed"
