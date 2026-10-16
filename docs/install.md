@@ -113,7 +113,7 @@ a copy of the config at `/etc/eldar-os`.
 ## 6. Boot and verify
 
 ```bash
-scripts/vm kill           # the installer
+scripts/vm stop           # the installer (a clean shutdown, so writes are flushed)
 scripts/vm start
 scripts/verify
 ```

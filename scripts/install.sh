@@ -27,4 +27,5 @@ nixos-install --flake .#eldar-os --no-root-passwd --no-channel-copy
 mkdir -p /mnt/etc/eldar-os
 cp -a "$REPO"/. /mnt/etc/eldar-os/
 
-echo "installed. power off, then boot it with: scripts/vm start"
+sync
+echo "installed. shut the installer down (scripts/vm stop), then: scripts/vm start"

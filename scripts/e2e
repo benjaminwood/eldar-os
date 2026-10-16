@@ -14,6 +14,7 @@ step() { echo; echo "=== $* ($(date +%T))"; }
 trap 'status=$?; if [ $status -ne 0 ]; then echo "--- serial log tail"; tail -c 4000 "$STATE/serial.log" 2>/dev/null | tr -cd "[:print:]\n"; fi; $VM kill 2>/dev/null || true' EXIT
 
 step "ssh key"
+install -d -m 700 ~/.ssh
 [ -f ~/.ssh/eldar-os-vm ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/eldar-os-vm
 
 step "installer iso"
@@ -32,8 +33,17 @@ step "install"
 git ls-files -co --exclude-standard | tar -cf - -T - | VM_USER=nixos $VM ssh 'rm -rf eldar-os && mkdir eldar-os && tar -xf - -C eldar-os'
 VM_USER=nixos $VM ssh 'sudo bash eldar-os/scripts/install.sh'
 
+# The config authorizes one specific key (hosts/eldar-os/configuration.nix).
+# This run's key may differ (CI, a fork), so let it in through ben's own
+# ~/.ssh/authorized_keys on the new disk: test state, not configuration.
+step "authorize this run's key on the installed system"
+VM_USER=nixos $VM ssh "sudo install -d -m 700 -o 1000 -g 100 /mnt/home/ben/.ssh \
+  && echo '$(cat ~/.ssh/eldar-os-vm.pub)' | sudo tee -a /mnt/home/ben/.ssh/authorized_keys >/dev/null \
+  && sudo chown 1000:100 /mnt/home/ben/.ssh/authorized_keys && sudo chmod 600 /mnt/home/ben/.ssh/authorized_keys \
+  && sync"
+
 step "boot installed system"
-$VM kill
+$VM stop
 $VM start
 timeout 300 bash -c "until grep -aq 'eldar-os login:' '$STATE/serial.log'; do sleep 3; done"
 

@@ -10,7 +10,9 @@
     # QEMU
     "virtio_pci" "virtio_blk" "virtio_scsi" "virtio_net"
   ];
-  boot.kernelModules = [ "kvm-amd" ];
+  # kvm-amd isn't listed in boot.kernelModules: udev loads it from the CPU's
+  # modalias on AMD, and forcing it fails (and degrades boot) on Intel, which
+  # is what CI runners have.
 
   hardware.enableRedistributableFirmware = true;
   hardware.cpu.amd.updateMicrocode = true;

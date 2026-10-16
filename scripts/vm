@@ -6,7 +6,8 @@
 #   scripts/vm install    boot the NixOS installer ISO, target disk attached
 #   scripts/vm start      boot eldar-os from the target disk
 #                         (NO_KEY=1: without the key disk, as on bare metal)
-#   scripts/vm stop       ACPI shutdown (scripts/vm kill to force)
+#   scripts/vm stop       clean ACPI shutdown, waits for it (kill forces; unflushed
+#                         guest writes are lost)
 #   scripts/vm status     is it running
 #   scripts/vm console    attach to the serial console (Ctrl-] to leave)
 #   scripts/vm log        tail the serial log
@@ -172,7 +173,11 @@ case "${1:-}" in
       | socat - "UNIX-CONNECT:$STATE/serial.sock"
     for _ in $(seq 20); do VM_USER=nixos "$0" ${DRY_RUN:+--dry-run} ssh true 2>/dev/null && { echo "ssh ok"; exit 0; }; sleep 1; done
     die "ssh as nixos still failing" ;;
-  stop) running || die "not running"; monitor system_powerdown; echo "shutdown requested" ;;
+  stop)  # clean ACPI shutdown, so the guest flushes its caches; waits up to 2 min
+    running || die "not running"
+    monitor system_powerdown
+    for _ in $(seq 120); do running || { echo "stopped"; exit 0; }; sleep 1; done
+    die "still running after 2 min (scripts/vm ${DRY_RUN:+--dry-run }kill forces it, unflushed writes are lost)" ;;
   kill) systemctl --user stop "$UNIT" ;;
   status) systemctl --user --no-pager status "$UNIT" | head -5 || true ;;
   console) exec socat -,raw,echo=0,escape=0x1d "UNIX-CONNECT:$STATE/serial.sock" ;;
