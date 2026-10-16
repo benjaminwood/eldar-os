@@ -43,9 +43,10 @@
     ];
   };
 
-  # BOOTSTRAP ONLY — remove before cutover. Lets Claude apply configs over SSH
-  # (scripts/deploy) before ben has a password and before the PR → apply loop
-  # exists.
+  # Remove before cutover. While the machine is only reached as ben over SSH
+  # (the admin session), passwordless sudo costs little and keeps admin work
+  # quick. Once ben runs a desktop, a browser and arbitrary tools, it would turn
+  # any compromise of those into root. Agents are separate users either way.
   security.sudo.wheelNeedsPassword = false;
 
   # scripts/try: ben may *activate* (not make the boot default) a config from

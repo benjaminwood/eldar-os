@@ -67,5 +67,5 @@ may push to staging `main` directly; commits are signed with
 - Disks are referred to by serial, never `/dev/nvmeXn1` (the names have swapped
   between boots on this machine).
 - Test against the dry-run VM (`scripts/vm --dry-run …`) before the real disk.
-- `security.sudo.wheelNeedsPassword = false` is bootstrap-only and goes once
-  Ben's password is a secret.
+- `security.sudo.wheelNeedsPassword = false` stays until cutover (Ben's call),
+  then goes; the narrow `scripts/try` rule stays.
