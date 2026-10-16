@@ -6,10 +6,12 @@ KEYS=$STATE_DIR/deploy-keys
 
 log() { echo "eldar-os-apply: $*"; }
 
+# A stalled connection must fail fast, not hang the apply: bounded connect,
+# keepalives, an overall timeout, and one retry.
 fetch() { # dir url key
-  export GIT_SSH_COMMAND="ssh -i $3 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-  [ -d "$1/.git" ] || git clone -q --no-checkout "$2" "$1"
-  git -C "$1" fetch -q origin main
+  export GIT_SSH_COMMAND="ssh -i $3 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
+  [ -d "$1/.git" ] || timeout 60 git clone -q --no-checkout "$2" "$1"
+  timeout 30 git -C "$1" fetch -q origin main || { log "fetch of $2 failed, retrying"; timeout 30 git -C "$1" fetch -q origin main; }
   unset GIT_SSH_COMMAND
 }
 

@@ -65,7 +65,7 @@ in
     eldar-os.apply.healthChecks = lib.mkBefore [
       "systemctl is-active --quiet sshd"
       # outbound network, DNS and the deploy key all still work
-      "GIT_SSH_COMMAND='ssh -i ${stateDir}/deploy-keys/staging -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes' git ls-remote -q ${cfg.repo} main >/dev/null"
+      "GIT_SSH_COMMAND='ssh -i ${stateDir}/deploy-keys/staging -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10' timeout 30 git ls-remote -q ${cfg.repo} main >/dev/null"
     ];
 
     systemd.services.eldar-os-apply = {
