@@ -11,6 +11,10 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # Ben's dotfiles (chezmoi source), shared with his other machines.
     dotfiles = {
       url = "github:benjaminwood/dotfiles/eldar-os";
@@ -18,7 +22,7 @@
     };
   };
 
-  outputs = { nixpkgs, disko, sops-nix, dotfiles, ... }: {
+  outputs = { nixpkgs, disko, sops-nix, microvm, dotfiles, ... }: {
     nixosConfigurations.eldar-os = nixpkgs.lib.nixosSystem {
       specialArgs = { inherit dotfiles; };
       modules = [
@@ -27,6 +31,8 @@
         ./modules/apply
         ./modules/secrets.nix
         ./modules/chezmoi.nix
+        microvm.nixosModules.host
+        ./modules/eldar-vm.nix
         ./hosts/eldar-os
       ];
     };
