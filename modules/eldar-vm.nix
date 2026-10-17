@@ -23,6 +23,11 @@ in
       type = lib.types.ints.positive;
       description = "vCPUs. They're scheduled, not reserved: give Eldar all of the host's threads.";
     };
+    config = lib.mkOption {
+      type = lib.types.deferredModule;
+      default = { };
+      description = "Extra NixOS config for the VM, from the host: its users' tools, dotfiles and so on.";
+    };
     memMiB = lib.mkOption {
       type = lib.types.ints.positive;
       description = ''
@@ -92,6 +97,7 @@ in
   # --- the VM -----------------------------------------------------------------
 
   microvm.vms.eldar.config = { pkgs, ... }: {
+    imports = [ cfg.config ];
     system.stateVersion = "26.05";
     networking.hostName = "eldar";
 
