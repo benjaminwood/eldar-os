@@ -1,0 +1,3 @@
+# False positives, by gitleaks fingerprint, with why.
+# supervisor/web/static/vendor/xterm.js: minified xterm.js (vendored), "FourKeyMap=…" is library code.
+e523308003e033d1ef5ac1787f30edef5b67011c:supervisor/web/static/vendor/xterm.js:generic-api-key:1

@@ -61,15 +61,16 @@ for c in $(git rev-list "$range"); do
   if git log -1 --format=%B "$c" | grep -qiF -f "$deny"; then
     echo "DENIED: commit $(git rev-parse --short=12 "$c") message"; hits=1
   fi
-  for f in $(git show --format= --name-only "$c"); do
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
     if git show --format= "$c" -- "$f" | grep '^+' | grep -qiF -f "$deny"; then
       echo "DENIED: commit $(git rev-parse --short=12 "$c") adds it in $f"; hits=1
     fi
-  done
+  done < <(git show --format= --name-only "$c")
 done
-for f in $(git grep -liF -f "$deny" "$target" -- . | sed "s/^$target://"); do
-  echo "DENIED: $f (in the published files)"; hits=1
-done
+while IFS= read -r f; do
+  [ -n "$f" ] && { echo "DENIED: ${f#"$target":} (in the published files)"; hits=1; }
+done < <(git grep -liF -f "$deny" "$target" -- . || true)
 [ "$hits" = 0 ] || { echo "a deny-listed string would be published: rewrite staging history to remove it" >&2; exit 1; }
 echo "deny list: clean ($(grep -c . "$deny") strings)"
 
