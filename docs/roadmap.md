@@ -76,6 +76,9 @@ Checked items are done; the order of sections is roughly the order of work.
 
 ## Housekeeping
 
+- [ ] GitHub App via the manifest flow (settings from a file, one click) instead of
+      filling the form by hand
+
 - [ ] Run `scripts/e2e` again (last run predates chat and in-place updates)
 - [ ] Publish staging to the public repo
 - [ ] Merge the dotfiles `eldar-os` branch
