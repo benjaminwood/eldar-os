@@ -38,6 +38,9 @@ type Config struct {
 	OpTimeout time.Duration
 
 	AgentUser string // the unprivileged agent user (cron checks, herdr)
+
+	HerdrSession string      // herdr session the UIs show by default
+	TerminalSSH  TerminalSSH // live terminals into the VM
 }
 
 // Supervisor holds all state and serves both APIs.
@@ -53,6 +56,8 @@ type Supervisor struct {
 	settings  *Settings
 	crons     *Crons
 	profiles  *Profiles
+	herdr     *Herdr
+	termSSH   TerminalSSH
 	runner    interface {
 		Runner
 		ReadFile(ctx context.Context, path string) (string, error)
@@ -86,6 +91,8 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		settings:       NewSettings(cfg.SettingsPath, n),
 		crons:          NewCrons(cfg.CronsPath),
 		profiles:       profiles,
+		herdr:          NewHerdr(runner, cfg.AgentUser, cfg.HerdrSession, n),
+		termSSH:        cfg.TerminalSSH,
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil

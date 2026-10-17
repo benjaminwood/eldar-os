@@ -75,7 +75,10 @@ in
         install -d -m 0700 -o supervisor -g supervisor ${state} ${state}/ssh
         [ -f ${state}/ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N "" -C supervisor -f ${state}/ssh/id_ed25519
         chown supervisor:supervisor ${state}/ssh/id_ed25519 ${state}/ssh/id_ed25519.pub
+        # runAs runs approved commands; the agent user is how herdr is driven
+        # for the admin UIs (workspaces, sessions, live terminals).
         install -m 0644 ${state}/ssh/id_ed25519.pub ${vmSsh}/authorized_keys/${cfg.runAs}
+        install -m 0644 ${state}/ssh/id_ed25519.pub ${vmSsh}/authorized_keys/eldar
         echo "${vm.address} $(cut -d' ' -f1,2 ${vmSsh}/ssh_host_ed25519_key.pub)" > ${state}/ssh/known_hosts
         chown supervisor:supervisor ${state}/ssh/known_hosts
       '';

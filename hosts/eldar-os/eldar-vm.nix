@@ -8,8 +8,32 @@
   eldar-os.eldarVm.vcpu = 6;
   eldar-os.eldarVm.memMiB = 6144;
 
-  eldar-os.eldarVm.config = { pkgs, ... }: {
+  eldar-os.eldarVm.config = { pkgs, lib, ... }:
+  let
+    herdr = pkgs.callPackage ../../packages/herdr.nix { };
+  in {
     imports = [ ../../modules/chezmoi.nix ];
+
+    # herdr, Eldar's terminal workspace manager: the server runs as eldar
+    # (lingering, so with no one logged in), and there's always a "primary"
+    # workspace to start sessions in. The supervisor drives it for Ben's UIs.
+    systemd.user.services.herdr = {
+      description = "herdr server";
+      wantedBy = [ "default.target" ];
+      unitConfig.ConditionUser = "eldar";
+      path = [ herdr pkgs.jq pkgs.coreutils pkgs.bash pkgs.zsh ];
+      serviceConfig = {
+        ExecStart = "${lib.getExe' herdr "herdr"} server";
+        ExecStartPost = pkgs.writeShellScript "herdr-primary-workspace" ''
+          for _ in $(seq 100); do herdr workspace list >/dev/null 2>&1 && break; sleep 0.2; done
+          if [ "$(herdr workspace list | jq '[.result.workspaces[]?] | length')" = 0 ]; then
+            herdr workspace create --label primary --cwd /home/eldar/workspace --no-focus >/dev/null
+          fi
+        '';
+        Restart = "always";
+        RestartSec = 2;
+      };
+    };
 
     # Ben works in here as eldar, so his dotfiles apply to both users.
     eldar-os.chezmoi.users = {
@@ -42,7 +66,7 @@
       # cron (jobs.json) until jobs move to systemd timers
       supercronic
       # not in nixpkgs: ../../packages
-      (callPackage ../../packages/herdr.nix { })
+      herdr
       (callPackage ../../packages/hb.nix { })
       (callPackage ../../packages/rwx.nix { })
       (callPackage ../../packages/composio.nix { })

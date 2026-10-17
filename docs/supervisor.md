@@ -35,8 +35,15 @@ they share). Nix: `modules/supervisor.nix`, configured in
 Develop: `scripts/go test ./...`, then `scripts/try` (the Nix build runs the
 tests too).
 
+## herdr and live terminals
+
+herdr runs in Eldar's VM as `eldar` (a user service, with a `primary`
+workspace). The supervisor drives it over SSH as `eldar` for the admin UIs:
+the workspace view, starting Claude sessions or shells in a new tab, closing
+them, and live terminals (`herdr terminal attach … --takeover` in a PTY,
+streamed over a WebSocket on the admin socket; closing it hangs up the attach).
+
 ## Not ported yet
 
-Mac commands, AWS credentials, MCP OAuth, Arc, chat with Eldar, herdr control
-and live terminals, the tmux/herdr approval nudges, and the secrets-dump socket
-used by `suben`. Requests for them get a clear "not available yet" error.
+Mac commands, AWS credentials, MCP OAuth, Arc, chat with Eldar, the tmux/herdr
+approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error.

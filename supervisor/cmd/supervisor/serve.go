@@ -50,6 +50,7 @@ func runServe(args []string) {
 		OpBin:                 env("OP_PATH", "op"),
 		OpTimeout:             ms("OP_TIMEOUT_MS", 15_000),
 		AgentUser:             env("SUPERVISOR_AGENT_USER", "eldar"),
+		HerdrSession:          env("HERDR_SESSION", "default"),
 	}
 	runner := &server.SSHRunner{
 		Host:        env("SUPERVISOR_AGENT_HOST", "10.42.0.2"),
@@ -57,6 +58,7 @@ func runServe(args []string) {
 		KnownHosts:  env("SUPERVISOR_KNOWN_HOSTS", state+"/ssh/known_hosts"),
 		DefaultUser: env("SUPERVISOR_RUN_USER", "ben"),
 	}
+	cfg.TerminalSSH = server.TerminalSSH{Host: runner.Host, KeyPath: runner.KeyPath, KnownHosts: runner.KnownHosts, User: cfg.AgentUser}
 	profiles := server.LoadProfiles(os.Environ(), cfg.OpBin, cfg.OpTimeout, cfg.CacheDir)
 	s, err := server.New(cfg, profiles, runner)
 	if err != nil {

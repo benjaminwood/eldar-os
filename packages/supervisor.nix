@@ -4,7 +4,7 @@
   pname = "supervisor";
   version = "0.1.0";
   src = lib.cleanSource ../supervisor;
-  vendorHash = "sha256-9wOSaQBh6k15agQ1331nwFg3abhfLA1PEQjakuLwvtE=";
+  vendorHash = "sha256-O0kJx0qwRR/CrmTY9rDOtk51yeUtmC7oC6MyNSymPiA=";
   subPackages = [ "cmd/supervisor" ];
   env.CGO_ENABLED = 0;
   ldflags = [ "-s" "-w" ];

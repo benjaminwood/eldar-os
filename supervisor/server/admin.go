@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,11 +21,14 @@ import (
 // Snapshot is everything the admin UIs show.
 func (s *Supervisor) Snapshot() api.State {
 	mode, exp := s.modes.Status()
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	herdr := s.herdr.View(ctx, "", 3*time.Second)
 	return api.State{
 		Now: time.Now().UnixMilli(), Mode: mode, ModeExpiresAt: exp,
 		Pending:       s.approvals.List(),
 		Sessions:      s.sessions.List(),
-		HerdrPanes:    []api.HerdrPane{},
+		HerdrPanes:    ClaudePanes(herdr),
 		Grants:        s.grants.List(),
 		Profiles:      s.profiles.Names(),
 		Cache:         s.profiles.Cache(),
@@ -32,7 +36,7 @@ func (s *Supervisor) Snapshot() api.State {
 		ArcProfiles:   []api.ArcProfile{},
 		Settings:      s.settings.Get(),
 		MCP:           api.MCPSummary{Servers: []api.MCPServer{}, Pending: []api.MCPSignIn{}},
-		Herdr:         api.HerdrView{OK: false, Error: "herdr isn't connected to this supervisor yet", Spaces: []api.HerdrSpace{}},
+		Herdr:         herdr,
 		Mac:           api.MacStatus{Allow: []string{}},
 		BrowserGrants: []api.BrowserGrant{},
 		Crons:         s.crons.List(),
@@ -109,8 +113,8 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 }
 
 var notYet = map[string]string{
-	"/admin/herdr": "herdr", "/admin/mac": "Mac access", "/admin/mcp": "MCP sign-ins",
-	"/admin/chat": "chat", "/admin/browser-grants": "Arc", "/admin/terminal": "terminals",
+	"/admin/mac": "Mac access", "/admin/mcp": "MCP sign-ins",
+	"/admin/chat": "chat", "/admin/browser-grants": "Arc",
 }
 
 func (s *Supervisor) adminHandler() http.Handler {
@@ -388,6 +392,63 @@ func (s *Supervisor) adminHandler() http.Handler {
 		s.adminLog(r, "UNPIN SESSION "+id, "Session key unpinned; next request re-pins")
 		sendJSON(w, 200, map[string]any{"ok": true})
 	})
+	// herdr: Ben's workspaces in Eldar's VM.
+	herdrSession := func(v string) string {
+		if v == "" {
+			return s.herdr.DefaultSession
+		}
+		return v
+	}
+	mux.HandleFunc("GET /admin/herdr", func(w http.ResponseWriter, r *http.Request) {
+		sendJSON(w, 200, s.herdr.View(r.Context(), herdrSession(r.URL.Query().Get("session")), 0))
+	})
+	mux.HandleFunc("POST /admin/herdr/launch", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			WorkspaceID, Name, Cwd, Session string
+			SkipPermissions             *bool
+		}
+		readJSON(r, &b)
+		in := api.LaunchInput{WorkspaceID: b.WorkspaceID, Name: b.Name, Cwd: b.Cwd, SkipPermissions: b.SkipPermissions == nil || *b.SkipPermissions}
+		out, err := s.herdr.Launch(r.Context(), herdrSession(b.Session), in)
+		if err != nil {
+			sendJSON(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		cwd := in.Cwd
+		if cwd == "" {
+			cwd = defaultCwd
+		}
+		skip := ""
+		if in.SkipPermissions {
+			skip = ", skip permissions"
+		}
+		s.adminLog(r, "HERDR LAUNCH "+in.Name, fmt.Sprintf("Claude session %q started in %s (%s, %s%s)", in.Name, in.WorkspaceID, out["paneId"], cwd, skip))
+		sendJSON(w, 200, out)
+	})
+	mux.HandleFunc("POST /admin/herdr/shell", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ WorkspaceID, Name, Cwd, Session string }
+		readJSON(r, &b)
+		out, err := s.herdr.OpenShell(r.Context(), herdrSession(b.Session), b.WorkspaceID, b.Name, b.Cwd)
+		if err != nil {
+			sendJSON(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		s.adminLog(r, "HERDR SHELL "+b.Name, fmt.Sprintf("Terminal %q opened in %s (%s)", b.Name, b.WorkspaceID, out["paneId"]))
+		sendJSON(w, 200, out)
+	})
+	mux.HandleFunc("POST /admin/herdr/close", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ PaneID, Session string }
+		readJSON(r, &b)
+		out, err := s.herdr.Close(r.Context(), herdrSession(b.Session), b.PaneID)
+		if err != nil {
+			sendJSON(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		s.adminLog(r, "HERDR CLOSE "+b.PaneID, fmt.Sprintf("Closed %s %s", out["closed"], out["id"]))
+		sendJSON(w, 200, out)
+	})
+	mux.HandleFunc("GET /admin/terminal", s.handleTerminal)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		paths := make([]string, 0, len(notYet))
 		for p := range notYet {
