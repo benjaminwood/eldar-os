@@ -1,11 +1,16 @@
 # eldar-os
 
-A NixOS machine built to host an AI agent safely. Eldar, a long-running
-Claude Code agent, lives in a microVM with no credentials of its own.
-Everything it does with a credential goes through the **supervisor** on the
-host: it decides what may run, asks a human when it should, runs the command,
-and records it. The whole machine is one flake, and Eldar changes it the same
-way a person would: it opens a pull request, a human merges it, and the
+A computing environment for doing serious work with AI agents: the metal
+under a one-person software factory. Day to day, many Claude Code agents
+work side by side in [herdr](https://github.com/herdrdev/herdr)
+workspaces, one per task. Eldar, the long-running chief of staff, keeps track
+of them, and you step into any of them from your desk or your phone.
+
+The agents live in a microVM with no credentials of their own. Everything
+they do with a credential goes through the **supervisor** on the host: it
+decides what may run, asks a human when it should, runs the command, and
+records it. The whole machine is one flake, and the agents change it the same
+way a person would: they open a pull request, a human merges it, and the
 machine applies the change seconds later.
 
 <p align="center">
@@ -46,8 +51,10 @@ are marked where they appear.
   driving.
 - **A browser of its own.** Eldar has a headful Chrome for Playwright, which
   you can watch live from the web UI.
-- **Chief of staff.** Eldar's primary session is the one you chat with. Other
-  agents reach you through it, and it carries your replies back.
+- **Many agents, one desk.** Sessions are grouped by herdr workspace. From the
+  web UI you can start one, watch its status, or take over its terminal from
+  your phone. Eldar is the one you chat with: other agents reach you through
+  it, and it carries your replies back.
 - **It changes its own system, quickly.** Eldar opens PRs against this repo
   with its own GitHub App. Only you can merge. A signed webhook tells the
   machine to fetch `main`; it checks that every new commit is signed by an
