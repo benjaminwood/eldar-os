@@ -14,7 +14,7 @@
 # commits. Three checks before pushing: a deny list of strings that must never
 # be public (private, in the secrets repo: e.g. the tailnet's name), a review
 # for what no scanner recognizes (personal data, private infrastructure), and
-# gitleaks for secrets. If either finds something, fix it
+# gitleaks for secrets. If any finds something, fix it
 # by rewriting staging history (allowed: it isn't public yet), never by a
 # follow-up commit. See docs/publishing.md.
 set -euo pipefail
