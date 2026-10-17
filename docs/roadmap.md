@@ -23,6 +23,8 @@ Checked items are done; the order of sections is roughly the order of work.
 - [x] Eldar's VM updated in place, never restarted for software (0010)
 - [x] README with screenshots of both UIs, generated from made-up data
       (`scripts/screenshots`, `docs/screenshots.md`)
+- [x] Promo video of both UIs in use, recorded live against the demo and
+      composed in Remotion (`scripts/promo`, `docs/promo.md`)
 
 ## 1. Eldar improves its own system (PR → approve → apply)
 

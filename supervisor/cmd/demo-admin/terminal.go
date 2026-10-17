@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/coder/websocket"
@@ -12,9 +15,11 @@ import (
 
 // terminal stands in for /admin/terminal, which in the real supervisor is
 // `herdr terminal attach` on a pane in Eldar's VM. It draws a made-up Claude
-// Code session (the billing-retries fix, waiting on approval #41) laid out for
-// the size the browser asks for, and redraws it on resize.
-func terminal(w http.ResponseWriter, r *http.Request) {
+// Code session (the billing-retries fix) laid out for the size the browser
+// asks for, and redraws it on resize and as the story moves on: the push
+// waits on approval #41; once it's through, the session opens a PR and asks
+// for a log check, which it reports once that's approved.
+func (d *demo) terminal(w http.ResponseWriter, r *http.Request) {
 	cols, _ := strconv.Atoi(r.URL.Query().Get("cols"))
 	rows, _ := strconv.Atoi(r.URL.Query().Get("rows"))
 	ws, err := websocket.Accept(w, r, nil)
@@ -22,13 +27,39 @@ func terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer ws.CloseNow()
-	ctx := r.Context()
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	changed, unsub := d.subscribe()
+	defer unsub()
+	var mu sync.Mutex
+	drawn := ""
 	draw := func() error {
-		return ws.Write(ctx, websocket.MessageBinary, []byte(session(max(cols, 30), max(rows, 12))))
+		mu.Lock()
+		defer mu.Unlock()
+		stage, check := d.story()
+		screen := session(max(cols, 30), max(rows, 12), stage, check)
+		if screen == drawn {
+			return nil
+		}
+		drawn = screen
+		return ws.Write(ctx, websocket.MessageBinary, []byte(screen))
 	}
 	if draw() != nil {
 		return
 	}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-changed:
+				if draw() != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
 	for {
 		typ, data, err := ws.Read(ctx)
 		if err != nil {
@@ -39,7 +70,9 @@ func terminal(w http.ResponseWriter, r *http.Request) {
 			Cols, Rows int
 		}
 		if typ == websocket.MessageText && json.Unmarshal(data, &msg) == nil && msg.Type == "resize" {
+			mu.Lock()
 			cols, rows = msg.Cols, msg.Rows
+			mu.Unlock()
 			if draw() != nil {
 				return
 			}
@@ -97,7 +130,7 @@ func trunc(s string, width int) string {
 
 // session renders the screen: the conversation, scrolled so its end sits
 // above the spinner and the prompt box, as Claude Code draws it.
-func session(cols, rows int) string {
+func session(cols, rows, stage, checkID int) string {
 	var lines []string
 	add := func(l ...string) { lines = append(lines, l...) }
 	// para: a first-line marker (marker cells wide) and wrapped text, the rest
@@ -149,18 +182,42 @@ func session(cols, rows int) string {
 	add("")
 	say("Tests pass, including a new one for late-day failures. Pushing the branch so you can review it.")
 	tool("supervisor - supervisor_exec (MCP)", `command: "git push origin fix/billing-retries", credentials: ["GITHUB_TOKEN"]`)
-	out(true, dim, "Waiting for Ben's approval (#41)…")
+	spinner := "Waiting for approval… "
+	if stage == 0 {
+		out(true, dim, "Waiting for Ben's approval (#41)…")
+	} else {
+		out(true, "", "To github.com:example/api.git")
+		out(false, "", " * [new branch]  fix/billing-retries -> fix/billing-retries")
+		add("")
+		tool("supervisor - supervisor_exec (MCP)", `command: "gh pr create --fill", credentials: ["GITHUB_TOKEN"]`)
+		out(true, "", "https://github.com/example/api/pull/87")
+		add("")
+		say("PR #87 is up. Counting how many renewals were skipped, for the PR description.")
+		tool("supervisor - supervisor_exec (MCP)", `command: "aws logs tail /ecs/api --since 24h --filter-pattern \"skip renewal\"", aws_profile: "staging.ReadOnly"`)
+		if stage == 1 {
+			out(true, dim, fmt.Sprintf("Waiting for Ben's approval (#%d)…", checkID))
+		} else {
+			out(true, "", "ERROR retry: skip renewal 8812: next_attempt_at is in the past")
+			out(false, dim, "… +311 lines (ctrl+r to expand)")
+			add("")
+			say("312 renewals were skipped in the last day. That's in the PR description now; they'll retry on the next run once this merges.")
+			spinner = ""
+		}
+	}
 
 	// The bottom: spinner, prompt box, mode line.
 	bar := strings.Repeat("─", cols-2)
 	bottom := []string{
 		"",
-		orange + "✻ Waiting for approval… " + reset + dim + trunc("(2m 39s · esc to interrupt)", cols-24) + reset,
+		"",
 		"",
 		border + "╭" + bar + "╮" + reset,
 		border + "│" + reset + " > " + strings.Repeat(" ", cols-5) + border + "│" + reset,
 		border + "╰" + bar + "╯" + reset,
 		"  " + purple + "⏵⏵ accept edits on" + reset + dim + " (shift+tab to cycle)" + reset,
+	}
+	if spinner != "" {
+		bottom[1] = orange + "✻ " + spinner + reset + dim + trunc("(2m 39s · esc to interrupt)", cols-len([]rune(spinner))-2) + reset
 	}
 	if keep := rows - len(bottom); len(lines) > keep {
 		lines = lines[len(lines)-keep:]

@@ -15,6 +15,11 @@ way a person would: they open a pull request, a human merges it, and the
 machine applies the change seconds later.
 
 <p align="center">
+  <a href="docs/promo/promo.mp4"><img src="docs/promo/promo.gif" width="100%" alt="A 55-second tour: approving and denying from a phone, granting one session a scope in the TUI, stepping into a Claude session's terminal from a phone, chatting with Eldar, and the audit log"></a>
+  <br><sub>Real software, recorded live against made-up data. <a href="docs/promo/promo.mp4">Full quality (MP4)</a>.</sub>
+</p>
+
+<p align="center">
   <img src="docs/screenshots/web-approvals.png" width="23%" alt="The web UI on a phone: four approvals waiting, each with its command, session, credentials and reason">
   <img src="docs/screenshots/web-sessions.png" width="23%" alt="Sessions grouped by herdr workspace, showing which ones are waiting for a decision">
   <img src="docs/screenshots/web-terminal.png" width="23%" alt="A Claude session's terminal taken over from a phone, with the approval it's waiting on shown above it">
@@ -118,7 +123,7 @@ runs, and [docs/decisions/](docs/decisions/) for why it's built this way.
   dotfiles repo), `tailnet-proxy.nix`.
 - `supervisor/`: the supervisor (Go): server, MCP server, TUI and web UI in
   one binary, plus `apply-hook` (the webhook receiver), `tailnet-proxy` and
-  `demo-admin` (the screenshots' made-up data).
+  `demo-admin` (the screenshots' and promo's made-up data).
 - `trust/`: public keys allowed to sign what gets applied.
 - `packages/`: packages not in nixpkgs.
 - `scripts/`:
@@ -133,6 +138,7 @@ runs, and [docs/decisions/](docs/decisions/) for why it's built this way.
   - `github-setup`: the repo's ruleset and webhook, idempotent
   - `go`: Go in a pinned container, for the supervisor
   - `screenshots`: regenerate `docs/screenshots/` from demo data
+  - `promo`: record and compose the promo video (`docs/promo/`)
   - `publish`: publish staging history to the public repo
   - `host-tools`, `deploy`: pinned sops/age, and bootstrap only
 - `.github/workflows/ci.yml`: builds the system on every push to `main`, and
@@ -148,7 +154,8 @@ runs, and [docs/decisions/](docs/decisions/) for why it's built this way.
   the system.
 - [docs/publishing.md](docs/publishing.md): how private staging becomes this
   public repo.
-- [docs/screenshots.md](docs/screenshots.md): how the screenshots are made.
+- [docs/screenshots.md](docs/screenshots.md) and [docs/promo.md](docs/promo.md):
+  how the screenshots and the promo video are made.
 - [docs/roadmap.md](docs/roadmap.md): what's done and what's left.
 
 ## Status

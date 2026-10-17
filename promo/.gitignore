@@ -1,0 +1,4 @@
+node_modules/
+public/clips/
+public/fonts/JetBrainsMono-*.woff2
+out/

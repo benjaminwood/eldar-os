@@ -1,0 +1,14 @@
+{
+  "name": "eldar-os-promo",
+  "private": true,
+  "description": "The promo video: real supervisor UIs, recorded against made-up data, composed with Remotion. Run scripts/promo.",
+  "type": "module",
+  "dependencies": {
+    "@remotion/cli": "4.0.536",
+    "@remotion/transitions": "4.0.536",
+    "playwright": "1.56.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.536"
+  }
+}

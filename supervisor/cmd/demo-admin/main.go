@@ -7,6 +7,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -53,8 +54,8 @@ func state() api.State {
 				Reason: "gh on the Mac is too old for `gh pr checks --watch`", Credentials: ptr([]string{}), TimeoutSeconds: 300,
 				SessionID: sInfra, SessionVerified: true, Cwd: "~", Channel: "none", AllowAlways: "brew *",
 				CreatedAt: ms(-8 * time.Second), ExpiresAt: ms(172 * time.Second)},
-			{ID: 43, Kind: "exec", Title: "aws logs tail /ecs/api --since 1h --filter-pattern ERROR",
-				Command: "aws logs tail /ecs/api --since 1h --filter-pattern ERROR", Reason: "Find the 500s behind the retry bug",
+			{ID: 43, Kind: "exec", Title: `aws logs tail /ecs/api --since 24h --filter-pattern "skip renewal"`,
+				Command: `aws logs tail /ecs/api --since 24h --filter-pattern "skip renewal"`, Reason: "Count the skipped renewals for the PR description",
 				Profile: "work", Credentials: ptr([]string{}), AwsProfile: "staging.ReadOnly", TimeoutSeconds: 120,
 				SessionID: sBilling, SessionVerified: true, Cwd: "/home/eldar/workspace/projects/api", Channel: "none",
 				AllowAlways: "aws *", CreatedAt: ms(-3 * time.Second), ExpiresAt: ms(177 * time.Second)},
@@ -139,52 +140,106 @@ func audit() []api.AuditEntry {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		log.Fatal("usage: demo-admin <socket path>")
+	control := flag.String("control", "", "also serve the control API (control.go) on this TCP address, e.g. 127.0.0.1:18099")
+	flag.Parse()
+	if flag.NArg() != 1 {
+		log.Fatal("usage: demo-admin [-control addr] <socket path>")
 	}
-	os.Remove(os.Args[1])
-	ln, err := net.Listen("unix", os.Args[1])
+	sock := flag.Arg(0)
+	d := newDemo()
+	if *control != "" {
+		go func() { log.Fatal(http.ListenAndServe(*control, d.controlHandler())) }()
+	}
+	os.Remove(sock)
+	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("demo admin API on %s", os.Args[1])
-	log.Fatal(http.Serve(ln, handler()))
+	log.Printf("demo admin API on %s", sock)
+	log.Fatal(http.Serve(ln, d.handler()))
 }
 
-// handler answers the admin API's read endpoints with the demo state; every
-// write succeeds and changes nothing.
-func handler() http.Handler {
-	send := func(w http.ResponseWriter, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(v)
-	}
+func sendRaw(w http.ResponseWriter, b []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+}
+
+func send(w http.ResponseWriter, v any) {
+	b, _ := json.Marshal(v)
+	sendRaw(w, b)
+}
+
+// handler answers the admin API from the demo's state. Writes it doesn't
+// model succeed and change nothing.
+func (d *demo) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /admin/state", func(w http.ResponseWriter, r *http.Request) { send(w, state()) })
+	mux.HandleFunc("GET /admin/state", func(w http.ResponseWriter, r *http.Request) { sendRaw(w, d.snapshot()) })
 	mux.HandleFunc("GET /admin/events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fl := w.(http.Flusher)
+		changed, cancel := d.subscribe()
+		defer cancel()
 		for {
-			b, _ := json.Marshal(state())
-			if _, err := fmt.Fprintf(w, "event: state\ndata: %s\n\n", b); err != nil {
+			if _, err := fmt.Fprintf(w, "event: state\ndata: %s\n\n", d.snapshot()); err != nil {
 				return
 			}
 			fl.Flush()
 			select {
 			case <-r.Context().Done():
 				return
+			case <-changed:
 			case <-time.After(2 * time.Second):
 			}
 		}
 	})
-	mux.HandleFunc("GET /admin/chat", func(w http.ResponseWriter, r *http.Request) {
-		send(w, map[string]any{"messages": chat, "readUpTo": 6, "connected": true, "eldar": state().Chat.Eldar})
+	mux.HandleFunc("POST /admin/decide", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			ID       int          `json:"id"`
+			Decision api.Decision `json:"decision"`
+		}
+		json.NewDecoder(r.Body).Decode(&b)
+		if !d.decide(b.ID, b.Decision) {
+			w.WriteHeader(409)
+			send(w, map[string]any{"error": "already answered or expired"})
+			return
+		}
+		send(w, map[string]any{"ok": true})
 	})
-	mux.HandleFunc("GET /admin/audit", func(w http.ResponseWriter, r *http.Request) { send(w, map[string]any{"entries": audit()}) })
-	mux.HandleFunc("GET /admin/herdr", func(w http.ResponseWriter, r *http.Request) { send(w, state().Herdr) })
+	mux.HandleFunc("POST /admin/grants", func(w http.ResponseWriter, r *http.Request) {
+		var b grantBody
+		json.NewDecoder(r.Body).Decode(&b)
+		client := r.Header.Get("X-Admin-Client")
+		if client == "" {
+			client = "admin"
+		}
+		send(w, d.addGrant(b, client))
+	})
+	mux.HandleFunc("GET /admin/credentials", func(w http.ResponseWriter, r *http.Request) {
+		names := map[string][]string{"work": {"CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "SENTRY_TOKEN"}, "personal": {"GITHUB_TOKEN", "OPENAI_API_KEY"}}
+		p := r.URL.Query().Get("profile")
+		send(w, map[string]any{"profile": p, "credentials": names[p]})
+	})
+	mux.HandleFunc("GET /admin/chat", func(w http.ResponseWriter, r *http.Request) { sendRaw(w, d.chatJSON()) })
+	mux.HandleFunc("POST /admin/chat", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ Text string }
+		json.NewDecoder(r.Body).Decode(&b)
+		send(w, map[string]any{"message": d.addChat("ben", b.Text), "connected": true})
+	})
+	mux.HandleFunc("POST /admin/chat/read", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ UpTo float64 }
+		json.NewDecoder(r.Body).Decode(&b)
+		send(w, map[string]any{"readUpTo": d.markRead(int(b.UpTo))})
+	})
+	mux.HandleFunc("GET /admin/audit", func(w http.ResponseWriter, r *http.Request) { sendRaw(w, d.auditJSON()) })
+	mux.HandleFunc("GET /admin/herdr", func(w http.ResponseWriter, r *http.Request) {
+		var st api.State
+		json.Unmarshal(d.snapshot(), &st)
+		send(w, st.Herdr)
+	})
 	mux.HandleFunc("GET /admin/aws", func(w http.ResponseWriter, r *http.Request) {
 		send(w, map[string]any{"sessions": []any{map[string]any{"session": "corp", "signedIn": true}}, "profiles": state().AwsProfiles})
 	})
-	mux.HandleFunc("GET /admin/terminal", terminal)
+	mux.HandleFunc("GET /admin/terminal", d.terminal)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { send(w, map[string]any{"ok": true}) })
 	return mux
 }

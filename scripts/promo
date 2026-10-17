@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# The promo video: the real web UI and TUI, recorded against made-up data
+# (supervisor/cmd/demo-admin) while a script plays the agents, then composed
+# with captions and transitions in Remotion. Writes docs/promo/promo.mp4 and
+# docs/promo/promo.gif. See docs/promo.md.
+#
+#   scripts/promo              record, render, make the GIF (a few minutes)
+#   scripts/promo record       just record the clips (promo/public/clips)
+#   scripts/promo render       just compose from the clips already recorded
+#   scripts/promo studio       Remotion's editor on http://localhost:3000
+#
+# Needs docker. Everything runs in the promo image (promo/Dockerfile).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+step=${1:-all}
+IMAGE=eldar-os-promo
+OUT=$PWD/docs/promo
+
+docker build -q -t "$IMAGE" promo >/dev/null
+run() {
+  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e LANG=C.UTF-8 -v "$PWD:/repo" -w /repo/promo "$@"
+}
+if [ ! -d promo/node_modules ] || [ promo/package-lock.json -nt promo/node_modules ]; then
+  run "$IMAGE" npm ci --no-audit --no-fund
+fi
+mkdir -p promo/public/fonts
+cp supervisor/web/static/vendor/JetBrainsMono-{Regular,Bold}.woff2 promo/public/fonts/
+
+record() {
+  bin=$(mktemp -d); trap 'rm -rf "$bin"' RETURN
+  echo "building…"
+  scripts/go build -o /src/.promo-bin/ ./cmd/demo-admin ./cmd/supervisor
+  mv supervisor/.promo-bin/* "$bin/" && rmdir supervisor/.promo-bin
+  echo "recording…"
+  run -v "$bin:/work/bin:ro" "$IMAGE" node record.mjs
+}
+
+HEADLESS_SHELL=/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell
+render() {
+  echo "rendering…"
+  mkdir -p "$OUT"
+  run "$IMAGE" npx remotion render src/index.ts Promo out/promo.mp4 \
+    --browser-executable="$HEADLESS_SHELL" --codec=h264 --crf=22 --x264-preset=slow --log=error
+  echo "GIF…"
+  # Its own render, without the ambient motion (see STILL in promo/src/ui.tsx).
+  run "$IMAGE" npx remotion render src/index.ts Promo out/still.mp4 --props='{"still":true}' --scale=0.5 \
+    --browser-executable="$HEADLESS_SHELL" --codec=h264 --crf=12 --log=error
+  run "$IMAGE" sh -c 'rm -rf out/gif && mkdir -p out/gif &&
+    ffmpeg -v error -i out/still.mp4 -vf "fps=12,scale=800:-1:flags=lanczos" out/gif/f%04d.png &&
+    gifski --fps 12 --quality 90 --motion-quality 100 --lossy-quality 90 --quiet -o out/promo.gif out/gif/f*.png'
+  cp promo/out/promo.mp4 promo/out/promo.gif "$OUT/"
+  ls -l "$OUT"
+}
+
+case $step in
+  all) record; render ;;
+  record) record ;;
+  render) render ;;
+  studio) run -p 3000:3000 "$IMAGE" npx remotion studio src/index.ts --browser-executable="$HEADLESS_SHELL" ;;
+  *) sed -n '2,12p' "$0" >&2; exit 2 ;;
+esac
