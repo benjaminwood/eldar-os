@@ -27,6 +27,8 @@ import (
 //	SUPERVISOR_SSH_KEY          key for the VM
 //	SUPERVISOR_KNOWN_HOSTS      the VM's pinned host key
 //	SUPERVISOR_DEFAULT_PROFILE  the profile agents use unless told otherwise
+//	SUPERVISOR_HOSTS            hosts.json: remote hosts agents may run commands on
+//	SUPERVISOR_HOST_KEYS        directory of their private keys, one file per host name
 //	SUPERVISOR_GITHUB_APP_ID, SUPERVISOR_GITHUB_INSTALLATION_ID,
 //	SUPERVISOR_GITHUB_APP_KEY (key file), SUPERVISOR_GITHUB_REPOS (comma-separated names)
 //	                            Eldar's GitHub App (see server.GitHubApp)
@@ -64,6 +66,7 @@ func runServe(args []string) {
 		RelayPath:             state + "/relay.jsonl",
 		RelayStatePath:        state + "/relay-state.json",
 		WatchesPath:           state + "/watches.json",
+		HostAllowPath:         state + "/host-allow.json",
 	}
 	runner := &server.SSHRunner{
 		Host:        env("SUPERVISOR_AGENT_HOST", "10.42.0.2"),
@@ -71,6 +74,12 @@ func runServe(args []string) {
 		KnownHosts:  env("SUPERVISOR_KNOWN_HOSTS", state+"/ssh/known_hosts"),
 		DefaultUser: env("SUPERVISOR_RUN_USER", "ben"),
 	}
+	hosts, err := server.LoadHosts(os.Getenv("SUPERVISOR_HOSTS"), env("SUPERVISOR_HOST_KEYS", "/run/secrets/remote-hosts"), state)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "supervisor: hosts:", err)
+		os.Exit(1)
+	}
+	cfg.Hosts = hosts
 	cfg.GitHub = &server.GitHubApp{
 		AppID:          os.Getenv("SUPERVISOR_GITHUB_APP_ID"),
 		InstallationID: os.Getenv("SUPERVISOR_GITHUB_INSTALLATION_ID"),

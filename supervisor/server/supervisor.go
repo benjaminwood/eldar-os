@@ -45,8 +45,10 @@ type Config struct {
 	ChatPath, ChatStatePath   string
 	RelayPath, RelayStatePath string
 	WatchesPath               string
-	TerminalSSH               TerminalSSH // live terminals into the VM
-	GitHub                    *GitHubApp  // Eldar's GitHub App; nil = none
+	TerminalSSH               TerminalSSH            // live terminals into the VM
+	GitHub                    *GitHubApp             // Eldar's GitHub App; nil = none
+	Hosts                     map[string]*RemoteHost // remote hosts by name (hosts.go); "mac" is Ben's Mac
+	HostAllowPath             string
 }
 
 // Supervisor holds all state and serves both APIs.
@@ -68,6 +70,7 @@ type Supervisor struct {
 	relay     *Relay
 	relayPins KeyPins
 	watches   *Watches
+	hostAllow *HostAllow
 	termSSH   TerminalSSH
 	runner    interface {
 		Runner
@@ -107,6 +110,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		chat:           NewChat(cfg.ChatPath, cfg.ChatStatePath, n),
 		relay:          NewRelay(cfg.RelayPath, cfg.RelayStatePath),
 		watches:        NewWatches(cfg.WatchesPath),
+		hostAllow:      NewHostAllow(cfg.HostAllowPath),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil

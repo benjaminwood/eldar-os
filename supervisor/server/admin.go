@@ -40,7 +40,8 @@ func (s *Supervisor) Snapshot() api.State {
 		Chat:          chat,
 		MCP:           api.MCPSummary{Servers: []api.MCPServer{}, Pending: []api.MCPSignIn{}},
 		Herdr:         herdr,
-		Mac:           api.MacStatus{Allow: []string{}},
+		Mac:           s.macStatus(),
+		Hosts:         s.hostStatuses(),
 		BrowserGrants: []api.BrowserGrant{},
 		Crons:         s.crons.List(),
 		Viewers:       s.n.Subscribers(),
@@ -79,12 +80,12 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 	if target == "" {
 		target = "eldar"
 	}
-	switch target {
-	case "eldar", "mac":
-	case "browser":
+	switch {
+	case target == "eldar", s.isHost(target):
+	case target == "browser":
 		return api.GrantInput{}, "Arc grants aren't available on this supervisor yet"
 	default:
-		return api.GrantInput{}, "target must be eldar, mac or browser"
+		return api.GrantInput{}, "target must be eldar, browser or a configured host (" + strings.Join(s.hostNames(), ", ") + ")"
 	}
 	profile := b.Profile
 	if profile == "" {
@@ -116,7 +117,7 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 }
 
 var notYet = map[string]string{
-	"/admin/mac": "Mac access", "/admin/mcp": "MCP sign-ins", "/admin/browser-grants": "Arc",
+	"/admin/mcp": "MCP sign-ins", "/admin/browser-grants": "Arc",
 }
 
 func (s *Supervisor) adminHandler() http.Handler {
@@ -124,6 +125,56 @@ func (s *Supervisor) adminHandler() http.Handler {
 	mux.HandleFunc("GET /admin/state", func(w http.ResponseWriter, r *http.Request) { sendJSON(w, 200, s.Snapshot()) })
 	// From the apply service (root): an apply finished; tell sessions whose PRs it contains.
 	mux.HandleFunc("POST /admin/applied", s.handleApplied)
+	// Remote hosts: /admin/hosts/{name}/test and …/allow; /admin/mac/… is the
+	// "mac" host, as the UIs call it.
+	hostTest := func(name func(*http.Request) string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			h := s.host(name(r))
+			if !h.Configured() {
+				sendJSON(w, 400, map[string]any{"error": "no such host configured on this supervisor"})
+				return
+			}
+			t := h.Test(r.Context())
+			s.n.Changed()
+			sendJSON(w, 200, t)
+		}
+	}
+	hostAllow := func(name func(*http.Request) string, remove bool) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			h := s.host(name(r))
+			if h == nil {
+				sendJSON(w, 404, map[string]any{"error": "no such host"})
+				return
+			}
+			var b struct {
+				Pattern string `json:"pattern"`
+			}
+			readJSON(r, &b)
+			if remove {
+				if !s.hostAllow.Remove(h.Name, b.Pattern) {
+					sendJSON(w, 404, map[string]any{"error": "no such pattern"})
+					return
+				}
+				s.adminLog(r, "ALLOW REMOVE "+h.Name, "Removed from the "+h.Label+" allow list: "+b.Pattern)
+			} else {
+				if err := s.hostAllow.Add(h.Name, b.Pattern); err != nil {
+					sendJSON(w, 400, map[string]any{"error": err.Error()})
+					return
+				}
+				s.adminLog(r, "ALLOW ADD "+h.Name, "Added to the "+h.Label+" allow list: "+b.Pattern)
+			}
+			s.n.Changed()
+			sendJSON(w, 200, map[string]any{"allow": s.hostAllow.List(h.Name)})
+		}
+	}
+	byPath := func(r *http.Request) string { return r.PathValue("name") }
+	mac := func(*http.Request) string { return "mac" }
+	mux.HandleFunc("POST /admin/hosts/{name}/test", hostTest(byPath))
+	mux.HandleFunc("POST /admin/hosts/{name}/allow", hostAllow(byPath, false))
+	mux.HandleFunc("DELETE /admin/hosts/{name}/allow", hostAllow(byPath, true))
+	mux.HandleFunc("POST /admin/mac/test", hostTest(mac))
+	mux.HandleFunc("POST /admin/mac/allow", hostAllow(mac, false))
+	mux.HandleFunc("DELETE /admin/mac/allow", hostAllow(mac, true))
 
 	// Server-sent snapshots: one on connect, one per burst of changes
 	// (debounced), and every 5 seconds as a heartbeat.
@@ -349,8 +400,8 @@ func (s *Supervisor) adminHandler() http.Handler {
 			who = truncRunes(g.Session, 8)
 		}
 		scope := fmt.Sprintf("session=%s profile=%s creds=%s", who, g.Profile, listOf(g.Credentials, "any", "none"))
-		if g.Target == "mac" {
-			scope = "MAC " + scope
+		if h := s.host(g.Target); h != nil {
+			scope = strings.ToUpper(h.Name) + " " + scope
 		} else {
 			scope += " aws=" + listOf(g.Aws, "any", "none")
 		}

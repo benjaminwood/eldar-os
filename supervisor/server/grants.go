@@ -30,8 +30,6 @@ type Grants struct {
 
 func NewGrants(n *Notifier) *Grants { return &Grants{grants: map[int]*api.Grant{}, n: n} }
 
-var grantTargets = []string{"eldar", "mac", "browser"}
-
 func normCreds(c api.Creds) api.Creds {
 	if c.Any {
 		return api.AnyCreds
@@ -47,8 +45,8 @@ func (g *Grants) Add(in api.GrantInput) api.Grant {
 	defer g.mu.Unlock()
 	now := time.Now()
 	target := in.Target
-	if !slices.Contains(grantTargets, target) {
-		target = "eldar"
+	if target == "" {
+		target = "eldar" // callers validate targets (eldar, browser or a configured host)
 	}
 	gr := &api.Grant{
 		Target:    target,

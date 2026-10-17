@@ -4,10 +4,12 @@
 #
 #   scripts/go build ./...
 #   scripts/go test ./...
+#   CGO_ENABLED=1 scripts/go test -race ./...   (the race detector needs cgo;
+#                         builds are static, without it, like the Nix package)
 set -euo pipefail
 cd "$(dirname "$0")/../supervisor"
 IMAGE=golang@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 # golang:1.27
 docker volume create eldar-os-gocache >/dev/null
 exec docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/src -w /src \
   -v eldar-os-gocache:/cache -e GOCACHE=/cache/build -e GOMODCACHE=/cache/mod -e HOME=/tmp \
-  -e CGO_ENABLED=0 -e GOFLAGS=-mod=mod "$IMAGE" go "$@"
+  -e CGO_ENABLED="${CGO_ENABLED:-0}" -e GOFLAGS=-mod=mod "$IMAGE" go "$@"

@@ -40,8 +40,8 @@ type Pending struct {
 	SessionVerified bool        `json:"sessionVerified,omitempty"`
 	Cwd             string      `json:"cwd,omitempty"`
 	Channel         string      `json:"channel"`          // tmux | none
-	Target          string      `json:"target,omitempty"` // "" / eldar, or "mac"
-	Host            string      `json:"host,omitempty"`   // Mac requests: the SSH host
+	Target          string      `json:"target,omitempty"` // "" / eldar, or a remote host's name ("mac")
+	Host            string      `json:"host,omitempty"`   // remote host requests: the host's label
 	AllowAlways     string      `json:"allowAlwaysPattern,omitempty"`
 	ArcProfile      string      `json:"arcProfile,omitempty"` // browser: Arc profile directory
 	ArcProfileName  string      `json:"arcProfileName,omitempty"`
@@ -109,6 +109,7 @@ type State struct {
 	MCP           MCPSummary     `json:"mcp"`
 	Herdr         HerdrView      `json:"herdr"`
 	Mac           MacStatus      `json:"mac"`
+	Hosts         []HostStatus   `json:"hosts"`
 	BrowserGrants []BrowserGrant `json:"browserGrants"`
 	Crons         []Cron         `json:"crons"`
 	Viewers       int            `json:"viewers"`
@@ -235,7 +236,19 @@ type BrowserGrant struct {
 	Channels    int    `json:"channels"`
 }
 
-// MacStatus is the proxy's view of Ben's Mac (target "mac" commands).
+// HostStatus is a remote host agents may run commands on (request target =
+// Name). The Mac is the host named "mac".
+type HostStatus struct {
+	Name        string   `json:"name"`
+	Label       string   `json:"label"`
+	Description string   `json:"description,omitempty"`
+	Configured  bool     `json:"configured"`
+	Host        string   `json:"host"`
+	LastTest    *MacTest `json:"lastTest"`
+	Allow       []string `json:"allow"`
+}
+
+// MacStatus is the supervisor's view of Ben's Mac (the host "mac").
 type MacStatus struct {
 	Configured bool     `json:"configured"`
 	Host       string   `json:"host"`

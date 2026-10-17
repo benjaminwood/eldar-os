@@ -43,6 +43,17 @@ in
         description = "WEB_ALLOWED_USER (tailnet login allowed in), WEB_BROWSER_DEVICE, …";
       };
     };
+    hostsFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        hosts.json: other machines agents may run commands on (name, label,
+        description, SSH target, pinned host key, login shell). Private, so not
+        in this repo. Each host's private key goes in the sops secret
+        `remote-hosts/<name>`, owned by the supervisor. Read at start: restart
+        the supervisor after changing it.
+      '';
+    };
     runAs = lib.mkOption {
       type = lib.types.str;
       default = "ben";
@@ -139,7 +150,10 @@ in
         SUPERVISOR_AGENT_HOST = vm.address;
         SUPERVISOR_RUN_USER = cfg.runAs;
         SUPERVISOR_AGENT_USER = "eldar";
+        SUPERVISOR_HOST_KEYS = "/run/secrets/remote-hosts";
         HOME = state;
+      } // lib.optionalAttrs (cfg.hostsFile != null) {
+        SUPERVISOR_HOSTS = cfg.hostsFile;
       };
       serviceConfig = {
         ExecStart = "${lib.getExe cfg.package} serve";

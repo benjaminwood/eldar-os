@@ -93,8 +93,8 @@ func (r *ExecRequest) auditMeta(e AuditEntry) AuditEntry {
 	}
 	e.AwsProfile, e.Cwd, e.SessionID = r.AwsProfile, r.Cwd, r.SessionID
 	e.Target = "eldar"
-	if r.Target == "mac" {
-		e.Target = "mac"
+	if r.Target != "" {
+		e.Target = r.Target
 	}
 	return e
 }
@@ -112,8 +112,8 @@ func (s *Supervisor) HandleExec(ctx context.Context, req ExecRequest) response {
 	id := s.nextID()
 	mode := s.modes.Current()
 
-	if req.Target == "mac" {
-		return fail(400, id, OutBadRequest, "Commands on Ben's Mac aren't available on this supervisor yet.")
+	if req.Target != "" && req.Target != "eldar" {
+		return s.handleHostExec(ctx, id, mode, req)
 	}
 	timeout := s.cfg.DefaultCommandTimeout
 	if req.TimeoutSeconds > 0 {

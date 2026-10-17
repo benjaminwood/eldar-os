@@ -58,8 +58,10 @@ jobs. Done last.
 ## 3. The rest of the supervisor
 
 - [x] `relay` channel: other agents reach Ben through Eldar (`notify_ben`)
-- [ ] Commands on Ben's Mac
-- [ ] Arc on Ben's Mac
+- [x] Commands on other hosts (configured privately), Ben's Mac first
+- [ ] The UIs list every host, not just the Mac
+- [ ] Arc on Ben's Mac; the patched Playwright extension gets its own public
+      repo (checked for secrets first)
 - [ ] Approval nudges in herdr
 - [ ] AWS credentials (needs a fresh SSO sign-in for the supervisor)
 - [ ] MCP OAuth (needs fresh sign-ins)

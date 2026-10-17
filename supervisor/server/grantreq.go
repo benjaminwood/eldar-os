@@ -64,17 +64,17 @@ func listOf(c api.Creds, anyText, none string) string {
 	return strings.Join(c.Names, ", ")
 }
 
-func describeScope(g api.GrantInput) string {
+func (s *Supervisor) describeScope(g api.GrantInput) string {
 	where := "Eldar"
-	if g.Target == "mac" {
-		where = "your Mac"
+	if h := s.host(g.Target); h != nil {
+		where = h.Label
 	}
 	profile := g.Profile
 	if profile == "*" {
 		profile = "ANY"
 	}
 	scope := fmt.Sprintf("%s: profile %s · creds %s", where, profile, listOf(g.Credentials, "ANY", "none"))
-	if g.Target != "mac" {
+	if g.Target == "eldar" || g.Target == "" {
 		scope += " · AWS " + listOf(g.Aws, "ANY role", "none")
 	}
 	return scope
@@ -82,7 +82,7 @@ func describeScope(g api.GrantInput) string {
 
 func coversEverything(g api.GrantInput) bool {
 	wide := g.Profile == "*" && g.Credentials.Any
-	if g.Target == "mac" {
+	if g.Target != "eldar" && g.Target != "" {
 		return wide
 	}
 	return wide && g.Aws.Any
@@ -95,15 +95,16 @@ func (s *Supervisor) grantScope(b GrantRequestBody, minutes int) (api.GrantInput
 	if target == "" {
 		target = "eldar"
 	}
-	switch target {
-	case "eldar", "mac":
-	case "browser":
+	host := s.isHost(target)
+	switch {
+	case target == "eldar", host:
+	case target == "browser":
 		return api.GrantInput{}, "Arc grants aren't available on this supervisor yet"
 	default:
-		return api.GrantInput{}, "target must be eldar, mac or browser"
+		return api.GrantInput{}, "target must be eldar, browser or a configured host (" + strings.Join(s.hostNames(), ", ") + ")"
 	}
 	profile := b.Profile
-	if profile == "" && target == "mac" {
+	if profile == "" && host {
 		profile = "*"
 	}
 	if profile == "" {
@@ -122,8 +123,8 @@ func (s *Supervisor) grantScope(b GrantRequestBody, minutes int) (api.GrantInput
 	if !ok {
 		return api.GrantInput{}, `aws must be a list of AWS profiles, [] for none, or "*"`
 	}
-	if target == "mac" && (aws.Any || len(aws.Names) > 0) {
-		return api.GrantInput{}, "Mac commands can't use AWS; leave aws out"
+	if host && (aws.Any || len(aws.Names) > 0) {
+		return api.GrantInput{}, "commands on other hosts can't use AWS; leave aws out"
 	}
 	if len(aws.Names) > 0 {
 		return api.GrantInput{}, "unknown AWS profiles: " + strings.Join(aws.Names, ", ") + " (AWS isn't set up on this supervisor yet)"
@@ -171,7 +172,7 @@ func (s *Supervisor) HandleGrantRequest(b GrantRequestBody, legacy string) respo
 	if why != "" {
 		return bad(400, why)
 	}
-	scope := describeScope(proposal)
+	scope := s.describeScope(proposal)
 	title := fmt.Sprintf("Grant for %dm · %s", minutes, scope)
 	if coversEverything(proposal) {
 		title = "⚠ EVERYTHING — " + title
@@ -194,7 +195,7 @@ func (s *Supervisor) HandleGrantRequest(b GrantRequestBody, legacy string) respo
 			input = override
 		}
 		g := s.grants.Add(input)
-		granted := describeScope(input)
+		granted := s.describeScope(input)
 		why := "Approved by Ben as requested"
 		if narrowed {
 			why = "Approved by Ben, narrowed in the grant editor"

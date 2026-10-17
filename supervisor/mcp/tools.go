@@ -15,6 +15,7 @@ import (
 type tool struct {
 	Name        string
 	Description string
+	describe    func(s *server) string // a description built from what the supervisor reports
 	Schema      func(profiles []string, def string) map[string]any
 	run         func(ctx context.Context, args map[string]any) map[string]any
 }
@@ -124,6 +125,22 @@ func (s *server) profiles(ctx context.Context) ([]string, string) {
 	}
 	sort.Strings(names)
 	def, _ := op["defaultProfile"].(string)
+	var hosts []hostInfo
+	hs, _ := data["hosts"].([]any)
+	for _, x := range hs {
+		if m, ok := x.(map[string]any); ok {
+			h := hostInfo{}
+			h.Name, _ = m["name"].(string)
+			h.Label, _ = m["label"].(string)
+			h.Description, _ = m["description"].(string)
+			if h.Name != "" {
+				hosts = append(hosts, h)
+			}
+		}
+	}
+	s.hostsMu.Lock()
+	s.hosts = hosts
+	s.hostsMu.Unlock()
 	return names, def
 }
 
@@ -142,9 +159,29 @@ func (s *server) describeTools(ctx context.Context) []map[string]any {
 	profiles, def := s.profiles(ctx)
 	var out []map[string]any
 	for _, t := range s.toolList() {
-		out = append(out, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Schema(profiles, def)})
+		d := t.Description
+		if t.describe != nil {
+			d = t.describe(s)
+		}
+		out = append(out, map[string]any{"name": t.Name, "description": d, "inputSchema": t.Schema(profiles, def)})
 	}
 	return out
+}
+
+type hostInfo struct{ Name, Label, Description string }
+
+func (s *server) hostList() []hostInfo {
+	s.hostsMu.Lock()
+	defer s.hostsMu.Unlock()
+	return append([]hostInfo{}, s.hosts...)
+}
+
+func (s *server) hostNames() []string {
+	var names []string
+	for _, h := range s.hostList() {
+		names = append(names, h.Name)
+	}
+	return names
 }
 
 func object(props map[string]any, required ...string) map[string]any {
@@ -188,6 +225,47 @@ func (s *server) toolList() []tool {
 				}, "command", "reason")
 			},
 			run: s.execTool,
+		},
+		{
+			Name: "supervisor_host_exec",
+			describe: func(s *server) string {
+				d := "Run a shell command on another machine Ben has configured (not this VM), through the supervisor. " +
+					"Ben approves each host's commands separately from ones in this VM: expect a prompt unless he has " +
+					"allow-listed the command on that host or made a grant for it. Grants for this VM never cover other hosts.\n\n" +
+					"The command is plain text, run verbatim in the host's login shell: no quoting layer. It runs in the " +
+					"user's home directory unless you set cwd (a path on that host). Use it only for what exists only on that " +
+					"host; do everything else here. Credentials are optional: pass profile and credentials only when the " +
+					"command needs a 1Password secret.\n\nHosts:"
+				hosts := s.hostList()
+				if len(hosts) == 0 {
+					return d + " none are configured right now."
+				}
+				for _, h := range hosts {
+					d += fmt.Sprintf("\n- %s: %s", h.Name, h.Label)
+					if h.Description != "" {
+						d += ". " + h.Description
+					}
+				}
+				return d
+			},
+			Schema: func(profiles []string, def string) map[string]any {
+				host := map[string]any{"type": "string", "description": "Which host (see the list in this tool's description)."}
+				if names := s.hostNames(); len(names) > 0 {
+					host["enum"] = names
+				}
+				return object(map[string]any{
+					"host":    host,
+					"command": map[string]any{"type": "string", "description": "The exact command to run there."},
+					"reason":  map[string]any{"type": "string", "description": "Shown in Ben's approval prompt: what it does and why, so he can approve at a glance."},
+					"cwd":     map[string]any{"type": "string", "description": "Directory on that host, e.g. \"~/code/app\". Defaults to ~."},
+					"profile": profileSchema(profiles, "", "Only with credentials: which 1Password profile they come from."),
+					"credentials": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+						"description": "Credential names to export for this command (needs profile). Omit when no secret is needed."},
+					"timeout_seconds": map[string]any{"type": "number", "default": defaultTimeoutS,
+						"description": fmt.Sprintf("Wall clock there. Default %ds, ceiling %ds; on expiry the whole process tree is killed.", defaultTimeoutS, maxTimeoutS)},
+				}, "host", "command", "reason")
+			},
+			run: s.hostExecTool,
 		},
 		{
 			Name: "supervisor_policy_check",
@@ -323,6 +401,12 @@ func (s *server) execTool(ctx context.Context, args map[string]any) map[string]a
 	if _, ok := data["error"]; ok {
 		return failure(data)
 	}
+	return execOutput(data, timeoutS)
+}
+
+// execOutput presents a command's result: output, then any timeout,
+// truncation and exit code, so the next move is clear.
+func execOutput(data map[string]any, timeoutS int) map[string]any {
 	stdout, _ := data["stdout"].(string)
 	stderr, _ := data["stderr"].(string)
 	exit, _ := data["exitCode"].(float64)
@@ -482,4 +566,39 @@ func (s *server) watchPRTool(ctx context.Context, args map[string]any) map[strin
 	}
 	return textResult(fmt.Sprintf("Watching %v#%v (%v). You'll get an [eldar-os] message here when it's applied.%s",
 		data["repo"], data["pr"], data["title"], note))
+}
+
+func (s *server) hostExecTool(ctx context.Context, args map[string]any) map[string]any {
+	command, host := str(args, "command"), str(args, "host")
+	if host == "" || host == "eldar" {
+		return errorText("host is required: one of the configured hosts (not this VM; use supervisor_exec here).")
+	}
+	if strings.TrimSpace(command) == "" {
+		return errorText("command is required.")
+	}
+	timeoutS := defaultTimeoutS
+	if t, ok := args["timeout_seconds"].(float64); ok {
+		timeoutS = min(max(int(math.Round(t)), 1), maxTimeoutS)
+	}
+	// Runs on that host: cwd is a path there (default ~), and a profile only
+	// matters when credentials are asked for.
+	payload := map[string]any{"target": host, "script": command, "reason": str(args, "reason"), "timeoutSeconds": timeoutS}
+	if c := str(args, "cwd"); c != "" {
+		payload["cwd"] = c
+	}
+	if p := str(args, "profile"); p != "" {
+		payload["profile"] = p
+	}
+	if creds, ok := strList(args["credentials"]); ok {
+		payload["credentials"] = creds
+	}
+	s.session(payload)
+	data, err := s.c.post(ctx, "/exec", payload, httpTimeoutFor(timeoutS))
+	if err != nil {
+		return unreachable(err)
+	}
+	if _, ok := data["error"]; ok {
+		return failure(data)
+	}
+	return execOutput(data, timeoutS)
 }

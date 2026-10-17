@@ -48,6 +48,27 @@ and the default one from `/status`, so they stay configuration
 random session key at start, which the supervisor pins to the session ID. A
 session picks the server up when it starts.
 
+## Commands on other hosts
+
+Agents can run commands on other machines Ben has configured, through the
+supervisor: `supervisor_host_exec` (MCP), or `POST /exec` with `target` set to
+the host's name. Ben's Mac (`mac`) is the first. Each host is private config:
+`hosts.json` in the secrets repo (`hostsFile`) gives its name, label, a
+description for agents, SSH target, pinned host key and login shell; its
+private key is the sops secret `remote-hosts/<name>`, readable only by the
+supervisor. The supervisor reads `hosts.json` at start.
+
+Approval is per host: global bypass and grants for Eldar's VM never cover
+another host. Only that host's grants (target = its name) and its allow list
+("Always allow" on one of its approvals; `host-allow.json`) skip the prompt;
+lockdown and policy denies still apply, on the command or on
+`<host>: <command>`. The command travels base64-encoded and runs verbatim in
+the host's login shell under a watchdog; credentials are exported in the
+script on stdin, never on a command line. Admin API: `/admin/hosts/{name}/test`
+and `/admin/hosts/{name}/allow` (`/admin/mac/…` is the `mac` host, as the UIs
+call it). The UIs show the Mac's approvals, grants and allow list; other hosts
+appear as ordinary approvals until the UIs list them.
+
 ## Chat, relay and Eldar's channels
 
 Eldar, the chief-of-staff session, loads two Claude channels from the
@@ -96,5 +117,4 @@ streamed over a WebSocket on the admin socket; closing it hangs up the attach).
 
 ## Not ported yet
 
-Mac commands, AWS credentials, MCP OAuth, Arc, the herdr
-approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error.
+AWS credentials, MCP OAuth, Arc, the herdr approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error.

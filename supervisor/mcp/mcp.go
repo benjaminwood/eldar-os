@@ -62,6 +62,8 @@ type server struct {
 	instructions string
 	channel      bool // a Claude channel: declares claude/channel, may push events
 	tools        map[string]tool
+	hostsMu      sync.Mutex
+	hosts        []hostInfo // remote hosts, as the supervisor last reported them
 	describe     func(ctx context.Context) []map[string]any
 	// start runs alongside the protocol loop (a channel's event stream);
 	// notify sends a notification to Claude.

@@ -95,7 +95,8 @@ func (s *Supervisor) agentHandler() http.Handler {
 		}
 		sendJSON(w, 200, map[string]any{
 			"mode": mode, "expiresAt": exp, "requestCount": s.reqID.Load(),
-			"op": map[string]any{"profiles": profiles, "defaultProfile": s.cfg.DefaultProfile, "warnings": nonNil(s.profiles.Warnings)},
+			"op":    map[string]any{"profiles": profiles, "defaultProfile": s.cfg.DefaultProfile, "warnings": nonNil(s.profiles.Warnings)},
+			"hosts": s.agentHosts(),
 			"limits": map[string]any{
 				"defaultCommandTimeoutS": int(s.cfg.DefaultCommandTimeout.Seconds()),
 				"maxCommandTimeoutS":     int(s.cfg.MaxCommandTimeout.Seconds()),

@@ -18,7 +18,8 @@ func fakeSupervisor(t *testing.T, exec func(body map[string]any) map[string]any)
 		switch r.URL.Path {
 		case "/status":
 			out = map[string]any{"op": map[string]any{"defaultProfile": "work",
-				"profiles": []any{map[string]any{"name": "work"}, map[string]any{"name": "home"}}}}
+				"profiles": []any{map[string]any{"name": "work"}, map[string]any{"name": "home"}}},
+				"hosts": []any{map[string]any{"name": "mac", "label": "Ben's Mac", "description": "macOS laptop"}}}
 		case "/exec":
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
@@ -124,4 +125,24 @@ func TestUnreachableSupervisor(t *testing.T) {
 	if text, _ := resultText(t, got[1]); !strings.HasPrefix(text, "SUPERVISOR UNREACHABLE") {
 		t.Fatalf("result %q", text)
 	}
+}
+
+func TestHostExecListsConfiguredHosts(t *testing.T) {
+	srv := fakeSupervisor(t, nil)
+	got := call(t, srv, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	for _, x := range got[1]["result"].(map[string]any)["tools"].([]any) {
+		m := x.(map[string]any)
+		if m["name"] != "supervisor_host_exec" {
+			continue
+		}
+		if !strings.Contains(m["description"].(string), "- mac: Ben's Mac. macOS laptop") {
+			t.Fatalf("description: %s", m["description"])
+		}
+		host := m["inputSchema"].(map[string]any)["properties"].(map[string]any)["host"].(map[string]any)
+		if e := host["enum"].([]any); len(e) != 1 || e[0] != "mac" {
+			t.Fatalf("host enum: %v", host)
+		}
+		return
+	}
+	t.Fatal("no supervisor_host_exec tool")
 }

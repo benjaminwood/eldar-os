@@ -7,6 +7,8 @@
     admins = [ "ben" ];
     policyFile = "/var/lib/eldar-os/secrets/supervisor/policy.yaml";
     environmentFile = config.sops.secrets.supervisor-env.path;
+    # Other machines agents may run commands on: Ben's Mac ("mac").
+    hostsFile = "/var/lib/eldar-os/secrets/supervisor/hosts.json";
     web = {
       enable = true;
       # A new name while the old eldar-proxy still runs; renamed at cutover.
@@ -19,6 +21,11 @@
     restartUnits = [ "supervisor-web.service" ];
   };
   sops.secrets.supervisor-env = {
+    owner = "supervisor";
+    restartUnits = [ "supervisor.service" ];
+  };
+  # Each remote host's SSH key (hosts.json says where and how to reach it).
+  sops.secrets."remote-hosts/mac" = {
     owner = "supervisor";
     restartUnits = [ "supervisor.service" ];
   };
