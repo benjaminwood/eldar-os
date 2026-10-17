@@ -1,17 +1,19 @@
 # Lives in both the private staging repo and the public repo (see
 # docs/publishing.md); the same file behaves slightly differently in each.
 #
-# build: the system closure builds from flake.lock (every push and PR).
+# build: the system closure builds from flake.lock (every push to main).
 # e2e:   the documented install reproduced end to end in a VM (scripts/e2e):
 #        installer ISO → disko → nixos-install → boot → scripts/verify.
 #        Nightly as well, so external drift (ISO URL, caches, GitHub) shows up
 #        even when nothing here changed.
+#
+# Not on pull requests: the machine builds before it applies anything and
+# changes nothing if the build fails, so a PR build only delays the merge.
 name: ci
 
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     - cron: "17 10 * * *"   # daily, 03:17 Pacific
   workflow_dispatch:
@@ -25,6 +27,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      - name: free disk space
+        # The closure outgrows a runner's free disk; drop preinstalled
+        # toolchains this job doesn't use (~30 GB).
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go /opt/hostedtoolcache/PyPy \
+            /usr/local/share/boost /usr/local/share/powershell /usr/share/swift
+          df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - name: flake check
@@ -43,6 +53,14 @@ jobs:
       VM_CPUS: 2
       VM_MEM: 5G
     steps:
+      - name: free disk space
+        # The closure outgrows a runner's free disk; drop preinstalled
+        # toolchains this job doesn't use (~30 GB).
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go /opt/hostedtoolcache/PyPy \
+            /usr/local/share/boost /usr/local/share/powershell /usr/share/swift
+          df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: enable KVM

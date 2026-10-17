@@ -38,7 +38,7 @@ an input (not created yet), or outside git entirely.
 
 ## CI
 
-The same workflow runs in both. `build` runs on every push in both. `e2e`
+The same workflow runs in both. `build` runs on every push to `main` in both (not on PRs: the machine builds before applying). `e2e`
 runs on every push and nightly in the public repo (public repos get free,
 larger runners); in staging the Actions variable `E2E=manual` makes it
 on-demand (`gh workflow run ci -R benjaminwood/eldar-os-staging`).
