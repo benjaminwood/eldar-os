@@ -48,6 +48,8 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH4OsaYdZiX9bacnB07cA359XLr6k/tXoQEK6Ri8W5OT ben@ben-desktop -> eldar-os"
       # Ben's Mac, over the tailnet (hosts/eldar-os/tailscale.nix)
       "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDki3du8ajCxzI1jSBoMus37OrT/TT4Lj119/jmg88bdWZrBTJQ5eqC8Qs8Cr00HRjn6aCDEA5Rn4Sjx7pV/koaR7XpRGeirecMx8l2qMFNT7mZcoVAD6VWY3c9oLIswpFU4iq06JrQTNlfKTWixlXWdMyl9Y+mKnM598ZCBqIp5ovo9OQSOmJRWttwiYdP2BfZqEyvmqcxogb7SJHTfPhqPFJ8jRiytj3AqwuybN42B8okPyPlEJ7m1GYBfj/my+NaHqCwY6oKEkbADmkjn/oa99KVOVu8830jHrDKPlw/95GQDhluYrWEoAVFV127BPc6xePwqwq3NJa9ksXQ0/sbHzkdJzkQXiKRb0fzyGWdb0H/2D/kc1xdfmlKFZi4vXUwlpArwbCbnUFpwIu4P20YIfNVM/J8Gl+5eMiR5yPFfi+KoBxx94LeS+W+DTdXKtdVH6WVI7I726LetzIZyWVfWsWbX2QlxScH9z1PKU6VvYbzK91T7UGqUmi3vdM025VdpECKjxFhQ5m5I/ZF4aOh/P2WibseP5gjg/uUg0CRRZbDIsaE5vrsXwbViy2sjSuA9Q/r7Sbc5xO8d7OcyF8PwmH3YCTpTI58zChuphm1rk0sbzsvvrSyg8x6wIuwy+dLUHyNIyPVwgIgBPzw/QdW8esZ/D56KcuysdiM23xbYw== ben@mac"
+      # Ben's iPad, the same way
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBI6jjV42ZcQxH6KrDrW7G667xOKk6jxjnsQn2rzmD6D ben@ipad"
     ];
   };
 

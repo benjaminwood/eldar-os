@@ -199,9 +199,10 @@ the tailnet as their own node. In the tailnet policy (download it first;
 change only these entries):
 
 - owners for `tag:eldar-os`, `tag:eldar-proxy` and `tag:eldar-os-hook`;
-- a `hosts` alias for Ben's Mac, and two rules: the Mac → `tag:eldar-os:22`
-  (Ben SSHes in) and `tag:eldar-os` → the Mac's port 22 (the supervisor's Mac
-  commands), both TCP only;
+- `hosts` aliases for Ben's Mac and iPad, and two rules: the Mac and the
+  iPad → `tag:eldar-os:22` (Ben SSHes in; the VM is a jump from there) and
+  `tag:eldar-os` → the Mac's port 22 (the supervisor's Mac commands), both TCP
+  only;
 - the `funnel` node attribute for `tag:eldar-os-hook` (public HTTPS; no ACL
   rules, so no tailnet access);
 - `tests` that pin these paths, so a later edit can't quietly widen them.
