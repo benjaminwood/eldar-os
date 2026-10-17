@@ -25,16 +25,25 @@ if [ "${1:-}" != --force ] && [ "$(cat "$STATE_DIR/applied" 2>/dev/null)" = "$re
   exit 0
 fi
 
-# Only a tip signed by an allowed key gets applied.
+# Every commit main gained since the last apply, along its first-parent
+# chain, must be signed by an allowed key: Ben's merges on GitHub (web-flow)
+# and the admin's pushes. A PR's own commits come in as a merge's second
+# parent, covered by the signed merge. So an unsigned commit pushed straight
+# to main is never applied, even under a signed one. After a history rewrite,
+# the range starts where the old and new histories meet.
 GNUPGHOME=$(mktemp -d)
 export GNUPGHOME
 trap 'rm -rf "$GNUPGHOME"' EXIT
 gpg --quiet --import "$GPG_KEYS" 2>/dev/null
-if ! git -C "$SRC" -c gpg.ssh.allowedSignersFile="$ALLOWED_SIGNERS" verify-commit "$rev"; then
-  log "REFUSING ${rev:0:12}: not signed by an allowed key"
-  exit 1
-fi
-log "${rev:0:12} is signed by an allowed key: $(git -C "$SRC" log -1 --format=%s "$rev")"
+applied_rev=$(cut -d' ' -f1 "$STATE_DIR/applied" 2>/dev/null || true)
+base=$(git -C "$SRC" merge-base "$applied_rev" "$rev" 2>/dev/null || true)
+for c in $rev $([ -n "$base" ] && git -C "$SRC" rev-list --first-parent "$base..$rev"); do
+  if ! git -C "$SRC" -c gpg.ssh.allowedSignersFile="$ALLOWED_SIGNERS" verify-commit "$c" 2>/dev/null; then
+    log "REFUSING ${rev:0:12}: ${c:0:12} ($(git -C "$SRC" log -1 --format=%s "$c")) on main isn't signed by an allowed key"
+    exit 1
+  fi
+done
+log "${rev:0:12} and main's commits since ${base:0:12} are signed by allowed keys: $(git -C "$SRC" log -1 --format=%s "$rev")"
 
 git -C "$SRC" checkout -q --force --detach "$rev"
 git -C "$SECRETS" checkout -q --force --detach "$secrets_rev"

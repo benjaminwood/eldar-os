@@ -24,12 +24,14 @@ Checked items are done; the order of sections is roughly the order of work.
 
 ## 1. Eldar improves its own system (PR → approve → apply)
 
-- [ ] Signed commits required on staging `main` (GitHub ruleset), so only
-      Ben's merges and the admin's signed pushes land there
+- [x] Only signed commits on `main` apply: every commit since the last
+      apply, first-parent (Ben's merges and the admin's pushes), not just the tip
 - [x] Supervisor MCP server (`supervisor_exec` and friends) in Eldar's VM, ported
       from the old client and renamed to supervisor throughout
 - [ ] A GitHub credential for Eldar, limited to opening PRs on the staging
       repo, held by the supervisor
+- [ ] Keep Eldar from pushing to `main` at all (a ruleset or a token without
+      that right); today an unsigned push there only stalls applies until reverted
 - [ ] Eldar's first PR, merged by Ben on GitHub, applied by the machine
 
 ## 2. Eldar's identity and tools: the workspace

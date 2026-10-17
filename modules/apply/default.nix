@@ -2,8 +2,8 @@
 # (docs/decisions/0005-apply-loop.md).
 #
 # A timer (and `scripts/apply`, on demand) fetches staging `main` and the
-# private secrets repo with read-only deploy keys, refuses a tip that isn't
-# signed by an allowed key, builds, activates with `test`, runs health
+# private secrets repo with read-only deploy keys, refuses it unless every commit
+# main gained (first-parent) is signed by an allowed key, builds, activates with `test`, runs health
 # checks, and only then makes the new system the boot default. A failed
 # check, or the apply dying mid-way, rolls back to the previous system.
 { config, lib, pkgs, ... }:

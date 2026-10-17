@@ -43,8 +43,8 @@ from code that exists because of one, and supersede rather than rewrite.
 
 ## Changing the system
 
-The machine applies staging `main` itself, and only if the tip is signed by an
-allowed key (`docs/decisions/0005-apply-loop.md`). Claude in Ben's admin session
+The machine applies staging `main` itself, and only if every commit it gained
+(first-parent) is signed by an allowed key (`docs/decisions/0005-apply-loop.md`). Claude in Ben's admin session
 may push to staging `main` directly; commits are signed with
 `~/.ssh/eldar-os-signing` (configured in this repo's git config).
 
