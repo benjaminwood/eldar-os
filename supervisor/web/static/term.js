@@ -105,6 +105,7 @@ const KEYS = [
   { label: "⌃", title: "Ctrl (swipe up: ^C)", mod: "ctrl", up: { label: "^C", send: "\x03" } },
   { label: "⌥", title: "Alt", mod: "alt" },
   { label: "⇥", title: "Tab (swipe up: ⇧Tab)", send: "\t", up: { label: "⇤", send: "\x1b[Z" } },
+  { label: "⎘", title: "Paste", paste: true },
   ...[["`", "~"], ["@", "#"], ["$", "^"], [";", ":"], ["-", "_"], ["=", "+"]].map(([a, b]) => ({ label: a, send: a, up: { label: b, send: b }, sym: true })),
   { arrows: true },
   { label: "⏎", title: "Enter", send: "\r" },
@@ -306,6 +307,18 @@ async function connectTerminal() {
     sc.raf = requestAnimationFrame(glide);
   }, { passive: true });
 
+  // Paste: mobile browsers don't hand the terminal a paste. Read the
+  // clipboard (iOS asks the first time); if that's refused, a text box the
+  // user can long-press-paste into. term.paste() sends it as a real paste
+  // (bracketed when the program asked for that).
+  async function pasteClipboard() {
+    let text = "";
+    try { text = await navigator.clipboard.readText(); } catch {}
+    if (!text) text = window.prompt("Paste into the terminal:") || "";
+    if (text) term.paste(text);
+    term.focus();
+  }
+
   // Key bar gestures. Pointer events drive everything; touchstart/mousedown
   // are cancelled so the bar never takes focus (and the iOS keyboard) away
   // from the terminal.
@@ -350,6 +363,7 @@ async function connectTerminal() {
     if (cancelled || key.arrows) return;
     const swipedUp = dirOf(e.clientX - x, e.clientY - y) === "up";
     if (swipedUp && key.up) return press(key.up.send);
+    if (key.paste) return pasteClipboard();
     if (key.mod) {
       const now = Date.now();
       const m = key.mod;
