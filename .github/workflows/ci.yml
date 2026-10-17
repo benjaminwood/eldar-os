@@ -18,9 +18,12 @@ on:
     - cron: "17 10 * * *"   # daily, 03:17 Pacific
   workflow_dispatch:
 
+# A newer push cancels a push's run in progress (only the latest main
+# matters); manual and scheduled runs (the e2e install) have their own group,
+# so pushes never cancel them.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   build:
