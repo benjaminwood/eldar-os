@@ -345,6 +345,13 @@ func (s *Supervisor) awaitHuman(id int, info api.Pending, allowAlways func()) st
 	info.ID, info.Channel = id, "none"
 	info.CreatedAt, info.ExpiresAt = now.UnixMilli(), now.Add(s.cfg.ApprovalTimeout).UnixMilli()
 	ch := s.approvals.Add(info)
+	what := info.Title
+	if info.Kind == "exec" && info.Target != "" && info.Target != "eldar" {
+		what = "on " + info.Host + ": " + what
+	} else if info.Kind == "grant_request" {
+		what = "grant: " + what
+	}
+	s.nudgeHerdr(id, info.SessionID, what)
 	select {
 	case d := <-ch:
 		if d == api.AllowAlways {

@@ -48,6 +48,13 @@ and the default one from `/status`, so they stay configuration
 random session key at start, which the supervisor pins to the session ID. A
 session picks the server up when it starts.
 
+## Approval nudges
+
+When a session in a herdr pane is waiting on Ben (a command, a browser
+window, a grant), herdr shows a notification with the "request" sound:
+`Approval #12 · <session title>` and what it's for. Answering still happens in
+the TUI or web UI; a failed nudge never affects the approval.
+
 ## Commands on other hosts
 
 Agents can run commands on other machines Ben has configured, through the
@@ -141,6 +148,6 @@ streamed over a WebSocket on the admin socket; closing it hangs up the attach).
 
 ## Not ported yet
 
-AWS credentials, the herdr approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error. Not
+AWS credentials, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error. Not
 planned for now: MCP sign-ins (OAuth). Cron auto-approval exists but is unused
 (no crons are authorized).

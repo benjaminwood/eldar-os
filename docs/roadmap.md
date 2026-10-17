@@ -64,7 +64,7 @@ jobs. Done last.
       extension are public: github.com/benjaminwood/arc-playwright-bridge
 - [ ] Reload the patched extension in Arc from the bridge's checkout (it's
       still loaded from the legacy folder), then drop the legacy paths
-- [ ] Approval nudges in herdr
+- [x] Approval nudges in herdr
 - [ ] AWS credentials (needs a fresh SSO sign-in for the supervisor)
 - [ ] ~~MCP OAuth~~: not porting for now. Cron auto-approval stays unused (the
       code exists; no crons are authorized)

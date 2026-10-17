@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,17 +14,26 @@ import (
 )
 
 type fakeRunner struct {
+	mu     sync.Mutex
 	specs  []ExecSpec
 	result ExecResult
 	files  map[string]string
 }
 
 func (f *fakeRunner) Exec(_ context.Context, s ExecSpec) (ExecResult, error) {
+	f.mu.Lock()
 	f.specs = append(f.specs, s)
+	f.mu.Unlock()
 	if len(s.Argv) == 2 && s.Argv[0] == "cron-status" {
 		return ExecResult{Stdout: "running\n"}, nil
 	}
 	return f.result, nil
+}
+
+func (f *fakeRunner) snapshot() []ExecSpec {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]ExecSpec{}, f.specs...)
 }
 
 func (f *fakeRunner) ReadFile(_ context.Context, p string) (string, error) { return f.files[p], nil }

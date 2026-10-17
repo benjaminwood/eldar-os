@@ -532,8 +532,8 @@ func (s *Supervisor) handleBrowserChannel(w http.ResponseWriter, r *http.Request
 		shellQuote(strings.Join(h.Browser.HiddenOrigins, ";"))))
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
+	stderr := &syncBuf{} // written by exec's copier while we may read it
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		ws.Close(4002, "couldn't start Playwright on "+h.Label)
 		return
@@ -720,4 +720,27 @@ func (s *Supervisor) revokeWindow(id int) error {
 		return errNoWindow
 	}
 	return nil
+}
+
+// syncBuf is a strings.Builder safe for one writer and concurrent readers.
+type syncBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.b.Len() > 64<<10 { // keep the tail only; we report the last line
+		t := s.b.String()[s.b.Len()-4096:]
+		s.b.Reset()
+		s.b.WriteString(t)
+	}
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

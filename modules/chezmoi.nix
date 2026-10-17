@@ -20,6 +20,11 @@ in
         type = lib.types.path;
         description = "chezmoi source directory (e.g. a non-flake input).";
       };
+      options.afterApply = lib.mkOption {
+        type = lib.types.lines;
+        default = "";
+        description = "Shell run as the user after each apply, e.g. to make a running program re-read its config. Failures are ignored.";
+      };
     });
   };
 
@@ -42,6 +47,7 @@ in
         # `apply --init` (re)generates the config from the source's template without
         # touching git; the source is read-only in the store.
         ExecStart = "${pkgs.chezmoi}/bin/chezmoi apply --init --force --no-tty --source ${u.source}";
+        ExecStartPost = lib.optional (u.afterApply != "") "-${pkgs.writeShellScript "chezmoi-${user}-after" u.afterApply}";
         TimeoutStartSec = "10min";
       };
     }) cfg.users;

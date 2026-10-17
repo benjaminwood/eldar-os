@@ -146,7 +146,12 @@
 
     # Ben works in here as eldar, so his dotfiles apply to both users.
     eldar-os.chezmoi.users = {
-      eldar.source = dotfiles;
+      eldar = {
+        source = dotfiles;
+        # herdr reads its config at start, and its server never restarts on
+        # an update (panes live under it): have it re-read the new one.
+        afterApply = "${lib.getExe' herdr "herdr"} server reload-config";
+      };
       ben.source = dotfiles;
     };
     programs.zsh = {
