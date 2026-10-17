@@ -18,6 +18,9 @@ let
   eldarUid = 1500;
   workspaceGid = 1500; # same number on host and in the VM, so group perms line up
   supervisor = config.eldar-os.supervisor.package; # its `mcp` subcommand is the agents' client
+  mcpServers = lib.mapAttrs (_: s: { type = "stdio"; args = [ ]; env = { }; } // s) ({
+    supervisor = { command = "/run/current-system/sw/bin/supervisor"; args = [ "mcp" ]; };
+  } // cfg.mcpServers);
 in
 {
   options.eldar-os.eldarVm = {
@@ -27,6 +30,16 @@ in
     vcpu = lib.mkOption {
       type = lib.types.ints.positive;
       description = "vCPUs. They're scheduled, not reserved: give Eldar all of the host's threads.";
+    };
+    mcpServers = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+      default = { };
+      example = { example = { command = "/run/current-system/sw/bin/example-mcp"; args = [ ]; }; };
+      description = ''
+        MCP servers every Claude session in Eldar's VM gets, as ~/.claude.json
+        entries (type defaults to stdio). The supervisor's is always there.
+        These are eldar-os's; Eldar's own live in ~/workspace/.mcp.json.
+      '';
     };
     config = lib.mkOption {
       type = lib.types.deferredModule;
@@ -293,27 +306,41 @@ in
       enable = true;
       config.credential."https://github.com".helper = "/run/current-system/sw/bin/supervisor git-credential";
     };
-    # Every Claude session in here gets the supervisor's MCP server
-    # (supervisor_exec and friends), registered in each user's ~/.claude.json.
-    # The command is the current system's binary, so new sessions pick up
-    # updates. Written in place (not replaced) so the file keeps its mode, and
-    # only when it differs, since running sessions write the file too.
+    # MCP servers, in two layers:
+    #   eldar-os's (cfg.mcpServers, the supervisor's always): written into each
+    #     user's ~/.claude.json. The entries this unit wrote last time are
+    #     remembered, so one removed here is removed there; anything else in
+    #     the file is left alone. Written in place (the file keeps its mode),
+    #     and only when something changed, since running sessions write it too.
+    #   Eldar's own: ~/workspace/.mcp.json, which Eldar changes freely. Claude
+    #     asks before starting a project's servers, which would stall an
+    #     unattended Eldar, so they're allowed for the workspace only (its
+    #     local settings); a repo cloned anywhere else still asks.
+    # Sessions pick up changes when they start.
     systemd.services = { sshd.unitConfig.RequiresMountsFor = [ "/etc/ssh/from-host" ]; } // builtins.listToAttrs (map (user: {
       name = "claude-mcp-${user}";
       value = {
-        description = "Register the supervisor's MCP server for ${user}'s Claude";
+        description = "Register eldar-os's MCP servers for ${user}'s Claude";
         wantedBy = [ "multi-user.target" ];
         after = [ "home.mount" ];
         path = [ pkgs.jq pkgs.coreutils ];
         serviceConfig = { Type = "oneshot"; RemainAfterExit = true; User = user; };
         script = ''
-          f=/home/${user}/.claude.json
+          f=/home/${user}/.claude.json managed=/home/${user}/.claude/eldar-os-mcp.json
+          mkdir -p /home/${user}/.claude
           [ -s "$f" ] || echo '{}' > "$f"
-          want='{"type":"stdio","command":"/run/current-system/sw/bin/supervisor","args":["mcp"],"env":{}}'
-          if ! jq -e --argjson w "$want" '.mcpServers.supervisor == $w' "$f" >/dev/null; then
-            new=$(jq --argjson w "$want" '.mcpServers.supervisor = $w' "$f")
-            printf '%s\n' "$new" > "$f"
-          fi
+          [ -s "$managed" ] || echo '[]' > "$managed"
+          want=${lib.escapeShellArg (builtins.toJSON mcpServers)}
+          new=$(jq --argjson w "$want" --slurpfile old "$managed" '
+            .mcpServers = ((.mcpServers // {}) | with_entries(select(.key as $k | $old[0] | index($k) | not))) + $w' "$f")
+          [ "$(jq -S .mcpServers <<<"$new")" = "$(jq -S '.mcpServers // {}' "$f")" ] || printf '%s\n' "$new" > "$f"
+          jq -n --argjson w "$want" '$w | keys' > "$managed"
+        '' + lib.optionalString (user == "eldar") ''
+          s=/home/eldar/workspace/.claude/settings.local.json
+          mkdir -p "$(dirname "$s")"
+          [ -s "$s" ] || echo '{}' > "$s"
+          jq -e '.enableAllProjectMcpServers == true' "$s" >/dev/null \
+            || { new=$(jq '.enableAllProjectMcpServers = true' "$s"); printf '%s\n' "$new" > "$s"; }
         '';
       };
     }) [ "eldar" "ben" ]);

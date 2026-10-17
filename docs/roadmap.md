@@ -38,12 +38,18 @@ Checked items are done; the order of sections is roughly the order of work.
 
 - [ ] Persona (`CLAUDE.md`), skills, projects, helper scripts
 - [ ] Cron jobs (`jobs.json`) under supercronic, or systemd timers
-- [ ] Remaining MCP servers (notify, system-cron, …)
-- [ ] Move workspace code off the old names (`PROXY_URL` in the chat channel)
+- [x] Chat and relay channels, `notify_ben`, `supervisor notify` and
+      `tell-agent` in the supervisor (no longer workspace code)
+- [x] MCP layers: eldar-os's servers from Nix (`eldarVm.mcpServers`); Eldar's
+      own in `~/workspace/.mcp.json`, allowed for the workspace only
+- [ ] Cron: the scheduler and its MCP in eldar-os (public); the jobs in Eldar's
+      workspace (Ben's, private)
+- [ ] Project MCPs stay with their projects (e.g. `playwright-pi` with the
+      dashboard)
 
 ## 3. The rest of the supervisor
 
-- [ ] `relay` channel: other agents reach Ben through Eldar (`notify_ben`)
+- [x] `relay` channel: other agents reach Ben through Eldar (`notify_ben`)
 - [ ] Commands on Ben's Mac
 - [ ] Arc on Ben's Mac
 - [ ] Approval nudges in herdr

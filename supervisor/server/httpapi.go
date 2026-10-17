@@ -147,6 +147,7 @@ func (s *Supervisor) agentHandler() http.Handler {
 	})
 	mux.HandleFunc("GET /github/token", s.handleGitHubToken)
 	s.chatRoutes(mux)
+	s.relayRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, 404, map[string]any{"error": "Not found"})
 	})

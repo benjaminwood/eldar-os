@@ -28,7 +28,7 @@ func TestGlobMatch(t *testing.T) {
 		{"*", "anything at all", true},
 		{"aws s3 ls*", "aws s3 ls s3://bucket", true},
 		{"rm -rf /tmp/x.y", "rm -rf /tmp/xzy", false}, // dots are literal
-		{"echo (hi)", "echo (hi)", true},               // parens are literal
+		{"echo (hi)", "echo (hi)", true},              // parens are literal
 		{"a+b", "a+b", true},
 		{"x*", "x\nrm -rf /", false}, // * doesn't cross newlines
 		{"colou?r", "color", true},   // as in the original, ? is a regex quantifier
@@ -83,8 +83,8 @@ rules:
 		want     Action
 	}{
 		{"aws s3 ls", "readonly", Allow},
-		{"aws s3 ls", "admin", Ask},       // allow rule doesn't name admin
-		{"aws s3 ls", "", Allow},          // rule with aws still covers non-AWS requests
+		{"aws s3 ls", "admin", Ask}, // allow rule doesn't name admin
+		{"aws s3 ls", "", Allow},    // rule with aws still covers non-AWS requests
 		{"kubectl get pods", "staging", Allow},
 		{"kubectl get pods", "prod", Ask},
 		{"echo hi", "", Allow},

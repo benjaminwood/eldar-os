@@ -48,6 +48,24 @@ and the default one from `/status`, so they stay configuration
 random session key at start, which the supervisor pins to the session ID. A
 session picks the server up when it starts.
 
+## Chat, relay and Eldar's channels
+
+Eldar, the chief-of-staff session, loads two Claude channels from the
+supervisor binary (its watchdog passes them; no other session has them):
+`supervisor channel chat` (Ben's chat from the web UI; `reply` and `history`
+tools) and `supervisor channel relay` (events from other agents, scripts and
+cron). Other sessions reach Ben with the `notify_ben` tool (in `supervisor
+mcp`); scripts and cron with `supervisor notify [--origin WHO] MESSAGE`. Both
+POST `/relay`; the supervisor keeps events in `relay.jsonl` until Eldar's relay
+channel takes them, so nothing is lost while Eldar restarts. Eldar carries
+Ben's answer back with `supervisor tell-agent PANE SESSION MESSAGE`, which
+types `[Ben, via Eldar] …` into that session's herdr pane.
+
+Only the Claude session in herdr workspace `primary`, tab `Eldar` may open the
+chat or relay stream, with a per-process key pinned to its session. A channel
+connecting while its stream is closed takes over the pin (a resumed Eldar is a
+new process); while a stream is open, only its key is accepted.
+
 ## GitHub as Eldar's App
 
 `GET /github/token` (agent API) returns an installation token for Eldar's

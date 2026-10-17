@@ -32,9 +32,13 @@ var auditFilters = []struct {
 	keep func(api.AuditEntry) bool
 }{
 	{"all", func(api.AuditEntry) bool { return true }},
-	{"asked you", func(e api.AuditEntry) bool { return e.Decision == "approved" || e.Decision == "denied" || e.Decision == "timeout" }},
+	{"asked you", func(e api.AuditEntry) bool {
+		return e.Decision == "approved" || e.Decision == "denied" || e.Decision == "timeout"
+	}},
 	{"auto-approved", func(e api.AuditEntry) bool { return e.Decision == "allow" || e.Decision == "bypass" }},
-	{"blocked", func(e api.AuditEntry) bool { return e.Decision == "deny" || e.Decision == "lockdown" || e.Decision == "denied" }},
+	{"blocked", func(e api.AuditEntry) bool {
+		return e.Decision == "deny" || e.Decision == "lockdown" || e.Decision == "denied"
+	}},
 }
 
 func decisionStyle(d string) (string, lipgloss.Style) {

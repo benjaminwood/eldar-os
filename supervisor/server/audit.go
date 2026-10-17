@@ -14,14 +14,14 @@ import (
 // AuditEntry is one line of the append-only audit log (JSONL). Same shape as
 // the original proxy's, so existing logs and the activity views keep working.
 type AuditEntry struct {
-	Timestamp      string `json:"timestamp"`
-	RequestID      int    `json:"requestId"`
-	Action         string `json:"action"`
-	Reason         string `json:"reason,omitempty"`
-	Profile        string `json:"profile,omitempty"`
-	Decision       string `json:"decision"`
-	DecisionReason string `json:"decisionReason"`
-	Mode           string `json:"mode"`
+	Timestamp      string       `json:"timestamp"`
+	RequestID      int          `json:"requestId"`
+	Action         string       `json:"action"`
+	Reason         string       `json:"reason,omitempty"`
+	Profile        string       `json:"profile,omitempty"`
+	Decision       string       `json:"decision"`
+	DecisionReason string       `json:"decisionReason"`
+	Mode           string       `json:"mode"`
 	Result         *AuditResult `json:"result,omitempty"`
 
 	// Absent (not a command), null (whole profile injected) or a list.

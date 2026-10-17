@@ -11,6 +11,14 @@
   eldar-os.eldarVm.config = { pkgs, lib, ... }:
   let
     herdr = pkgs.callPackage ../../packages/herdr.nix { };
+    # Eldar's two channels (supervisor/mcp): Ben's chat, and notify_ben events
+    # from other agents, scripts and cron. Only Eldar's session loads them.
+    channels = pkgs.writeText "eldar-channels.mcp.json" (builtins.toJSON {
+      mcpServers = lib.genAttrs [ "chat" "relay" ] (name: {
+        command = "/run/current-system/sw/bin/supervisor";
+        args = [ "channel" name ];
+      });
+    });
   in {
     imports = [ ../../modules/chezmoi.nix ];
 
@@ -40,9 +48,9 @@
     };
 
     # Eldar, the chief-of-staff Claude session: kept running in herdr
-    # workspace "primary", tab "Eldar", named "Eldar", with the chat channel
-    # (agent-relay/chat-channel.ts in the workspace) so Ben can talk to it from
-    # the supervisor's web UI. Every 30 s: make sure the workspace and tab
+    # workspace "primary", tab "Eldar", named "Eldar", with its channels: chat
+    # (Ben talks to it from the supervisor's web UI) and relay (other agents
+    # reach Ben through it). Every 30 s: make sure the workspace and tab
     # exist and Claude runs in the tab; if it's been gone for two checks,
     # resume the newest session named Eldar (or start one). `herdr agent
     # start` only acts on a pane at a bare shell prompt, so it never types
@@ -53,8 +61,7 @@
       after = [ "herdr.service" ];
       wants = [ "herdr.service" ];
       unitConfig.ConditionUser = "eldar";
-      path = [ herdr pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.findutils pkgs.bash pkgs.zsh pkgs.bun ];
-      environment.PROXY_URL = "http://10.42.0.1:9100";
+      path = [ herdr pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.findutils pkgs.bash pkgs.zsh ];
       serviceConfig = {
         # Claude's one-time prompts would block an unattended start: the
         # bypass-permissions confirmation (where Enter means "No, exit") and
@@ -73,10 +80,9 @@
         ExecStart = pkgs.writeShellScript "eldar-primary" ''
           WORKSPACE=primary TAB=Eldar NAME=Eldar CWD=/home/eldar/workspace
           TRANSCRIPTS=$HOME/.claude/projects/-home-eldar-workspace
-          RELAY=$CWD/projects/agent-relay
           CLAUDE_ARGS=(--dangerously-skip-permissions
-            --dangerously-load-development-channels server:chat
-            --mcp-config "$RELAY/chat.mcp.json")
+            --dangerously-load-development-channels server:chat server:relay
+            --mcp-config ${channels})
           log() { echo "eldar-primary: $*"; }
           h() { herdr "$@" 2>/dev/null; }
           # Newest transcript whose latest name is $NAME; prints its session ID.
@@ -106,10 +112,10 @@
             pane_id=$(jq -r '.pane_id' <<<"$pane")
             if [[ $(jq -r '.agent // empty' <<<"$pane") == claude ]]; then
               # Running, but is it Eldar's Claude? herdr resumes agents after
-              # a restart with a plain `claude --resume`, without the chat
-              # channel. Stop that one; the next checks resume it properly.
+              # a restart with a plain `claude --resume`, without the
+              # channels. Stop that one; the next checks resume it properly.
               fg=$(h pane process-info --pane "$pane_id" | jq -c '.result.process_info.foreground_processes[0] // empty')
-              if [[ -n $fg && $(jq -r .cmdline <<<"$fg") != *"server:chat"* ]]; then
+              if [[ -n $fg && $(jq -r .cmdline <<<"$fg") != *"server:chat server:relay"* ]]; then
                 log "Claude in $pane_id runs without Eldar's flags ($(jq -r .cmdline <<<"$fg")); restarting it"
                 kill "$(jq -r .pid <<<"$fg")"
               fi

@@ -407,7 +407,7 @@ func (s *Supervisor) adminHandler() http.Handler {
 	mux.HandleFunc("POST /admin/herdr/launch", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {
 			WorkspaceID, Name, Cwd, Session string
-			SkipPermissions             *bool
+			SkipPermissions                 *bool
 		}
 		readJSON(r, &b)
 		in := api.LaunchInput{WorkspaceID: b.WorkspaceID, Name: b.Name, Cwd: b.Cwd, SkipPermissions: b.SkipPermissions == nil || *b.SkipPermissions}

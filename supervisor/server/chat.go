@@ -223,6 +223,18 @@ type KeyPins struct {
 	pins map[string]string
 }
 
+// Repin replaces a session's pin: a channel connecting its stream while no
+// other connection holds it (the previous process ended, e.g. Eldar resumed).
+func (k *KeyPins) Repin(sessionID, key string) {
+	h := sha256.Sum256([]byte(key))
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.pins == nil {
+		k.pins = map[string]string{}
+	}
+	k.pins[sessionID] = hex.EncodeToString(h[:])
+}
+
 func (k *KeyPins) Check(sessionID, key string) bool {
 	h := sha256.Sum256([]byte(key))
 	hx := hex.EncodeToString(h[:])
@@ -260,6 +272,15 @@ func (s *Supervisor) chiefOfStaff(ctx context.Context, maxAge time.Duration) *ap
 
 // chatAuth: only the chief-of-staff session, with its pinned chat key.
 func (s *Supervisor) chatAuth(r *http.Request) (string, int, string) {
+	return s.chiefOfStaffAuth(r, &s.chatPins, "chat", false)
+}
+
+// chiefOfStaffAuth: only the chief-of-staff session, presenting the key its
+// `what` channel pinned (each channel process has its own).
+// With repin (a stream connecting while none is open), the caller's key
+// replaces the pin: a new channel process in the same session, after the old
+// one ended. While a stream is open, only its key is accepted.
+func (s *Supervisor) chiefOfStaffAuth(r *http.Request, pins *KeyPins, what string, repin bool) (string, int, string) {
 	sessionID, key := r.Header.Get("X-Session-Id"), r.Header.Get("X-Chat-Key")
 	if sessionID == "" || key == "" {
 		return "", 401, "need X-Session-Id and X-Chat-Key"
@@ -272,11 +293,13 @@ func (s *Supervisor) chatAuth(r *http.Request) (string, int, string) {
 		return "", 409, fmt.Sprintf("no Claude session in herdr workspace %q, tab %q", s.cfg.ChatWorkspace, s.cfg.ChatTab)
 	}
 	if cos.SessionID != sessionID {
-		return "", 403, "only the chief-of-staff session (Eldar) can use the chat"
+		return "", 403, "only the chief-of-staff session (Eldar) can use the " + what
 	}
-	if !s.chatPins.Check(sessionID, key) {
-		logf("chat: key mismatch for session %s", sessionID)
-		return "", 403, "chat key mismatch for this session"
+	if repin {
+		pins.Repin(sessionID, key)
+	} else if !pins.Check(sessionID, key) {
+		logf("%s: key mismatch for session %s", what, sessionID)
+		return "", 403, what + " key mismatch for this session"
 	}
 	return sessionID, 0, ""
 }
@@ -293,7 +316,15 @@ func (s *Supervisor) chatRoutes(mux *http.ServeMux) {
 		}
 	}
 	// Ben's undelivered messages, then each new one, as server-sent events.
-	mux.HandleFunc("GET /chat/stream", auth(func(w http.ResponseWriter, r *http.Request, session string) {
+	mux.HandleFunc("GET /chat/stream", func(w http.ResponseWriter, r *http.Request) {
+		s.chat.mu.Lock()
+		idle := s.chat.stream == nil
+		s.chat.mu.Unlock()
+		session, status, msg := s.chiefOfStaffAuth(r, &s.chatPins, "chat", idle)
+		if status != 0 {
+			sendJSON(w, status, map[string]any{"error": msg})
+			return
+		}
 		fl, ok := w.(http.Flusher)
 		if !ok {
 			return
@@ -360,7 +391,7 @@ func (s *Supervisor) chatRoutes(mux *http.ServeMux) {
 				fl.Flush()
 			}
 		}
-	}))
+	})
 	mux.HandleFunc("POST /chat/reply", auth(func(w http.ResponseWriter, r *http.Request, session string) {
 		var b struct {
 			Text string `json:"text"`

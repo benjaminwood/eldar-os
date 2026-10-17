@@ -120,11 +120,11 @@ func (g *Grants) sweep() {
 
 // GrantRequest is what a request asks for, as grants see it.
 type GrantRequest struct {
-	Target    string
-	SessionID string
-	Verified  bool
-	Profile   string   // browser: the Arc profile directory
-	Creds     []string // nil = the whole profile
+	Target     string
+	SessionID  string
+	Verified   bool
+	Profile    string   // browser: the Arc profile directory
+	Creds      []string // nil = the whole profile
 	AwsProfile string
 }
 

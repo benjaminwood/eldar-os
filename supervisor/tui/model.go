@@ -59,14 +59,14 @@ type model struct {
 	tab  tab
 
 	// approvals
-	pSel    int // selected pending ID
-	marks   map[int]bool
-	seen    map[int]bool
+	pSel       int // selected pending ID
+	marks      map[int]bool
+	seen       map[int]bool
 	seenSignIn map[string]bool
-	primed  bool
-	pOff    int
-	cmdOff  int // command scroll in the detail pane
-	btnHot  int // keyboard-highlighted button in the detail pane (-1 none)
+	primed     bool
+	pOff       int
+	cmdOff     int // command scroll in the detail pane
+	btnHot     int // keyboard-highlighted button in the detail pane (-1 none)
 
 	// sessions
 	sSel string
@@ -104,14 +104,14 @@ func Run(client *api.Client) error {
 	zone.NewGlobal()
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &model{
-		client: client,
-		events: client.Subscribe(ctx),
-		cancel: cancel,
-		marks:  map[int]bool{},
-		seen:   map[int]bool{},
+		client:     client,
+		events:     client.Subscribe(ctx),
+		cancel:     cancel,
+		marks:      map[int]bool{},
+		seen:       map[int]bool{},
 		seenSignIn: map[string]bool{},
-		now:    time.Now(),
-		btnHot: -1,
+		now:        time.Now(),
+		btnHot:     -1,
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
@@ -506,7 +506,6 @@ func (m *model) setPush(on bool) tea.Cmd {
 		return err
 	})
 }
-
 
 func (m *model) openEditor(e *editor) tea.Cmd {
 	m.editor = e

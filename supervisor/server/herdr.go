@@ -317,8 +317,12 @@ func (h *Herdr) newTab(ctx context.Context, session, workspace, name, cwd string
 		return "", "", err
 	}
 	var out struct {
-		Tab      struct{ TabID string `json:"tab_id"` }   `json:"tab"`
-		RootPane struct{ PaneID string `json:"pane_id"` } `json:"root_pane"`
+		Tab struct {
+			TabID string `json:"tab_id"`
+		} `json:"tab"`
+		RootPane struct {
+			PaneID string `json:"pane_id"`
+		} `json:"root_pane"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", "", err

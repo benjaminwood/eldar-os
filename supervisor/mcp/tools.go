@@ -250,6 +250,18 @@ func (s *server) toolList() []tool {
 			},
 			run: s.grantTool,
 		},
+		{
+			Name:        "notify_ben",
+			Description: notifyDescription,
+			Schema: func([]string, string) map[string]any {
+				return object(map[string]any{
+					"message":       map[string]any{"type": "string", "description": "The notification or question, one or two lines, leading with the actionable part."},
+					"expects_reply": map[string]any{"type": "boolean", "description": "true when you're waiting on Ben's answer; Eldar sends it back into this session."},
+					"origin":        map[string]any{"type": "string", "description": "Optional short label of who's sending, e.g. 'deploy script'. Defaults to this session's name."},
+				}, "message")
+			},
+			run: s.notifyTool,
+		},
 	}
 }
 

@@ -4,6 +4,12 @@
 //	supervisor         Ben's TUI: approvals, sessions, grants, the global mode
 //	supervisor web     the web UI (on the tailnet, with mobile push)
 //	supervisor mcp     the MCP server agents in Eldar's VM use to reach it (stdio)
+//	supervisor channel chat|relay
+//	                   Eldar's channels: Ben's chat, and other agents' notify_ben events
+//	supervisor notify [--origin WHO] MESSAGE
+//	                   one-way event to Eldar from a script or cron (or stdin)
+//	supervisor tell-agent PANE SESSION MESSAGE
+//	                   Eldar passes Ben's answer to another Claude session
 //	supervisor git-credential, supervisor github-token
 //	                   GitHub as Eldar's App, for git and gh in the VM
 //
@@ -15,9 +21,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"os/user"
+	"strings"
 	"syscall"
 
 	"github.com/benjaminwood/eldar-os/supervisor/api"
@@ -35,6 +43,34 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
 		runServe(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "channel" {
+		if len(os.Args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: supervisor channel chat|relay")
+			os.Exit(2)
+		}
+		if err := mcp.RunChannel(os.Args[2], version); err != nil {
+			fmt.Fprintln(os.Stderr, "supervisor channel:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "notify" {
+		runNotify(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "tell-agent" {
+		if len(os.Args) < 5 {
+			fmt.Fprintln(os.Stderr, "usage: supervisor tell-agent <pane_id> <session_id> <message...>")
+			os.Exit(2)
+		}
+		out, err := mcp.TellAgent(os.Args[2], os.Args[3], strings.Join(os.Args[4:], " "))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "supervisor tell-agent:", err)
+			os.Exit(1)
+		}
+		fmt.Println(out)
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "git-credential" {
@@ -125,4 +161,21 @@ func runWeb(args []string) {
 		fmt.Fprintln(os.Stderr, "supervisor web:", err)
 		os.Exit(1)
 	}
+}
+
+func runNotify(args []string) {
+	origin := ""
+	if len(args) >= 2 && args[0] == "--origin" {
+		origin, args = args[1], args[2:]
+	}
+	msg := strings.Join(args, " ")
+	if len(args) == 0 {
+		b, _ := io.ReadAll(os.Stdin)
+		msg = string(b)
+	}
+	if err := mcp.Notify(origin, msg); err != nil {
+		fmt.Fprintln(os.Stderr, "supervisor notify:", err)
+		os.Exit(1)
+	}
+	fmt.Println("relayed to Eldar")
 }

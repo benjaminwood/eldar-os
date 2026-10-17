@@ -37,14 +37,15 @@ type Config struct {
 	OpBin     string
 	OpTimeout time.Duration
 
-	AgentUser string // the unprivileged agent user (cron checks, herdr)
+	AgentUser      string // the unprivileged agent user (cron checks, herdr)
 	DefaultProfile string // the profile agents use unless told otherwise
 
-	HerdrSession string      // herdr session the UIs show by default
-	ChatWorkspace, ChatTab string // where Eldar, the chief-of-staff session, lives in herdr
-	ChatPath, ChatStatePath string
-	TerminalSSH  TerminalSSH // live terminals into the VM
-	GitHub       *GitHubApp  // Eldar's GitHub App; nil = none
+	HerdrSession              string // herdr session the UIs show by default
+	ChatWorkspace, ChatTab    string // where Eldar, the chief-of-staff session, lives in herdr
+	ChatPath, ChatStatePath   string
+	RelayPath, RelayStatePath string
+	TerminalSSH               TerminalSSH // live terminals into the VM
+	GitHub                    *GitHubApp  // Eldar's GitHub App; nil = none
 }
 
 // Supervisor holds all state and serves both APIs.
@@ -63,6 +64,8 @@ type Supervisor struct {
 	herdr     *Herdr
 	chat      *Chat
 	chatPins  KeyPins
+	relay     *Relay
+	relayPins KeyPins
 	termSSH   TerminalSSH
 	runner    interface {
 		Runner
@@ -100,6 +103,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		herdr:          NewHerdr(runner, cfg.AgentUser, cfg.HerdrSession, n),
 		termSSH:        cfg.TerminalSSH,
 		chat:           NewChat(cfg.ChatPath, cfg.ChatStatePath, n),
+		relay:          NewRelay(cfg.RelayPath, cfg.RelayStatePath),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil

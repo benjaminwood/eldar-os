@@ -30,7 +30,7 @@ const (
 type ExecRequest struct {
 	Command        string          `json:"command,omitempty"`
 	Script         string          `json:"script,omitempty"` // run verbatim under bash
-	Args           []string        `json:"args"` // present but empty ([]) still joins with a space, as before
+	Args           []string        `json:"args"`             // present but empty ([]) still joins with a space, as before
 	File           string          `json:"file,omitempty"`
 	MCP            json.RawMessage `json:"mcp,omitempty"`
 	Reason         string          `json:"reason,omitempty"`

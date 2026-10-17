@@ -1,10 +1,14 @@
-// Package mcp is the supervisor's MCP server for Claude sessions in Eldar's
-// VM (`supervisor mcp`, stdio): the agents' way to run commands with
-// credentials, ask for grants, and check policy. It holds nothing itself;
-// every tool is a call to the supervisor's agent API.
+// Package mcp holds the MCP servers agents in Eldar's VM use to reach the
+// supervisor, all stdio and all in the `supervisor` binary:
 //
-// The protocol is small enough to speak directly: newline-delimited
-// JSON-RPC 2.0 on stdin/stdout, with initialize, tools/list and tools/call.
+//	supervisor mcp            every session: supervisor_exec, grants, notify_ben, …
+//	supervisor channel chat   Eldar's session only: Ben's chat (a Claude channel)
+//	supervisor channel relay  Eldar's session only: other agents' notify_ben events
+//
+// They hold nothing themselves; every tool is a call to the supervisor's
+// agent API. The protocol is small enough to speak directly: newline-
+// delimited JSON-RPC 2.0 on stdin/stdout, with initialize, tools/list and
+// tools/call, plus notifications/claude/channel for the channels.
 package mcp
 
 import (
@@ -38,7 +42,13 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
-// Run serves MCP on stdin/stdout until stdin closes.
+type rpcNotification struct {
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
+}
+
+// Run serves the supervisor's tools on stdin/stdout until stdin closes.
 func Run(version string) error {
 	s := newServer(newClient(), version)
 	openScratchpadToBen(s.c.sessionID)
@@ -46,26 +56,43 @@ func Run(version string) error {
 }
 
 type server struct {
-	c       *client
-	version string
-	tools   map[string]tool
+	c            *client
+	name         string
+	version      string
+	instructions string
+	channel      bool // a Claude channel: declares claude/channel, may push events
+	tools        map[string]tool
+	describe     func(ctx context.Context) []map[string]any
+	// start runs alongside the protocol loop (a channel's event stream);
+	// notify sends a notification to Claude.
+	start func(ctx context.Context, notify func(method string, params any))
 }
 
 func newServer(c *client, version string) *server {
-	s := &server{c: c, version: version, tools: map[string]tool{}}
+	s := &server{c: c, name: "supervisor", version: version, tools: map[string]tool{}}
 	for _, t := range s.toolList() {
 		s.tools[t.Name] = t
 	}
+	s.describe = s.describeTools
 	return s
 }
 
 func (s *server) serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	var mu sync.Mutex
 	enc := json.NewEncoder(out)
-	send := func(r rpcResponse) {
+	write := func(v any) {
 		mu.Lock()
 		defer mu.Unlock()
-		enc.Encode(r)
+		enc.Encode(v)
+	}
+	send := func(r rpcResponse) { write(r) }
+	notify := func(method string, params any) {
+		write(rpcNotification{JSONRPC: "2.0", Method: method, Params: params})
+	}
+	if s.start != nil {
+		go s.start(ctx, notify)
 	}
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 64*1024), 16<<20)
@@ -106,15 +133,27 @@ func (s *server) handle(ctx context.Context, req rpcRequest) (any, *rpcError) {
 		if v == "" {
 			v = protocolVersion
 		}
-		return map[string]any{
+		caps := map[string]any{"tools": map[string]any{}}
+		if s.channel {
+			caps["experimental"] = map[string]any{"claude/channel": map[string]any{}}
+		}
+		r := map[string]any{
 			"protocolVersion": v,
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "supervisor", "version": s.version},
-		}, nil
+			"capabilities":    caps,
+			"serverInfo":      map[string]any{"name": s.name, "version": s.version},
+		}
+		if s.instructions != "" {
+			r["instructions"] = s.instructions
+		}
+		return r, nil
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": s.describeTools(ctx)}, nil
+		tools := []map[string]any{}
+		if s.describe != nil {
+			tools = s.describe(ctx)
+		}
+		return map[string]any{"tools": tools}, nil
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`

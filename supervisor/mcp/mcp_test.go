@@ -75,7 +75,7 @@ func TestToolsListNamesProfilesFromSupervisor(t *testing.T) {
 		if m := x.(map[string]any); m["name"] == "supervisor_exec" {
 			exec = m
 		}
-		if name := x.(map[string]any)["name"].(string); !strings.HasPrefix(name, "supervisor_") {
+		if name := x.(map[string]any)["name"].(string); !strings.HasPrefix(name, "supervisor_") && name != "notify_ben" {
 			t.Errorf("tool %q isn't named supervisor_*", name)
 		}
 	}
@@ -125,4 +125,3 @@ func TestUnreachableSupervisor(t *testing.T) {
 		t.Fatalf("result %q", text)
 	}
 }
-
