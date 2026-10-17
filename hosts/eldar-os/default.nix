@@ -5,5 +5,6 @@
     ./configuration.nix
     ./apply.nix
     ./ben.nix
+    ./eldar-vm.nix
   ];
 }
