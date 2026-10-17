@@ -69,6 +69,11 @@ Checked items are done; the order of sections is roughly the order of work.
       memory
 - [ ] Rename `supervisor-next` → the final web UI name; retire the Docker stack
 
+## Cycle time (0012)
+
+- [x] Applies start on a GitHub webhook (Tailscale Funnel), timer as fallback
+- [x] No CI on pull requests
+
 ## Housekeeping
 
 - [ ] Run `scripts/e2e` again (last run predates chat and in-place updates)
