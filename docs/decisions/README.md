@@ -17,3 +17,4 @@ the old one *Superseded by NNNN*. Don't rewrite history.
 | [0006](0006-dotfiles.md) | Dotfiles: one chezmoi repo for every machine | Accepted |
 | [0007](0007-xfs.md) | XFS instead of btrfs | Accepted |
 | [0008](0008-eldar-microvm.md) | Eldar's environment is a microVM; the host is the control plane | Accepted |
+| [0009](0009-supervisor.md) | The supervisor: a Go rewrite that runs commands in Eldar's VM | Accepted |

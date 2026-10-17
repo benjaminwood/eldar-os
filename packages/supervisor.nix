@@ -1,0 +1,19 @@
+{ lib, buildGoModule, go_1_27 }:
+# The supervisor (server, TUI and web UI in one binary): ../supervisor.
+(buildGoModule.override { go = go_1_27; }) {
+  pname = "supervisor";
+  version = "0.1.0";
+  src = lib.cleanSource ../supervisor;
+  vendorHash = "sha256-9wOSaQBh6k15agQ1331nwFg3abhfLA1PEQjakuLwvtE=";
+  subPackages = [ "cmd/supervisor" ];
+  env.CGO_ENABLED = 0;
+  ldflags = [ "-s" "-w" ];
+  # Run every package's tests (the server's parity tests), not just the
+  # built command's.
+  checkPhase = ''
+    runHook preCheck
+    go test ./...
+    runHook postCheck
+  '';
+  meta.mainProgram = "supervisor";
+}

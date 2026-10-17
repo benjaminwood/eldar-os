@@ -50,7 +50,7 @@ VM_USER=nixos $VM ssh 'set -e; cd eldar-os; export NIX_CONFIG="experimental-feat
   sudo install -d -m 755 /mnt/etc/ssh /mnt/var/lib/eldar-os/secrets
   sudo ssh-keygen -q -t ed25519 -N "" -C eldar-os-e2e -f /mnt/etc/ssh/ssh_host_ed25519_key
   recipient=$(nix run --inputs-from . nixpkgs#ssh-to-age < /mnt/etc/ssh/ssh_host_ed25519_key.pub)
-  printf "canary: secrets-pipeline-ok\n" > /tmp/test-secrets.yaml
+  printf "canary: secrets-pipeline-ok\nsupervisor-env: \"\"\nsupervisor-web-env: \"\"\n" > /tmp/test-secrets.yaml
   nix run --inputs-from . nixpkgs#sops -- encrypt --age "$recipient" /tmp/test-secrets.yaml \
     | sudo tee /mnt/var/lib/eldar-os/secrets/eldar-os.yaml >/dev/null
   sync'

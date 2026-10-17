@@ -33,6 +33,7 @@
         ./modules/chezmoi.nix
         microvm.nixosModules.host
         ./modules/eldar-vm.nix
+        ./modules/supervisor.nix
         ./hosts/eldar-os
       ];
     };

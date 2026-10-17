@@ -6,5 +6,6 @@
     ./apply.nix
     ./ben.nix
     ./eldar-vm.nix
+    ./supervisor.nix
   ];
 }

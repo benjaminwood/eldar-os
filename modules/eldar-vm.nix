@@ -10,15 +10,19 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.eldar-os.eldarVm;
-  hostAddr = "10.42.0.1";
-  vmAddr = "10.42.0.2";
-  supervisorPort = 9100;
+  hostAddr = cfg.hostAddress;
+  vmAddr = cfg.address;
+  supervisorPort = cfg.supervisorPort;
+  vmSsh = "/var/lib/eldar-vm/ssh"; # host-made SSH material, shared read-only into the VM
   workspace = "/srv/eldar/workspace";
   eldarUid = 1500;
   workspaceGid = 1500; # same number on host and in the VM, so group perms line up
 in
 {
   options.eldar-os.eldarVm = {
+    address = lib.mkOption { type = lib.types.str; default = "10.42.0.2"; readOnly = true; };
+    hostAddress = lib.mkOption { type = lib.types.str; default = "10.42.0.1"; readOnly = true; };
+    supervisorPort = lib.mkOption { type = lib.types.port; default = 9100; readOnly = true; };
     vcpu = lib.mkOption {
       type = lib.types.ints.positive;
       description = "vCPUs. They're scheduled, not reserved: give Eldar all of the host's threads.";
@@ -47,6 +51,23 @@ in
   users.users.eldar = { uid = eldarUid; isSystemUser = true; group = "eldar-ws"; };
   users.groups.eldar-ws = { gid = workspaceGid; members = [ "ben" ]; };
   systemd.tmpfiles.rules = [ "d ${workspace} 2770 eldar eldar-ws -" ];
+
+  # The VM's SSH host key lives on the host: a microVM's root is rebuilt on
+  # every boot, and a stable key can be pinned by whoever connects (the
+  # supervisor). Shared read-only, with authorized_keys/<user> for logins the
+  # host grants (see modules/supervisor.nix).
+  systemd.services.eldar-vm-ssh = {
+    description = "SSH host key for Eldar's VM";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "microvm-virtiofsd@eldar.service" "microvm@eldar.service" ];
+    requiredBy = [ "microvm-virtiofsd@eldar.service" ];
+    path = [ pkgs.openssh pkgs.coreutils ];
+    serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+    script = ''
+      install -d -m 0755 ${vmSsh} ${vmSsh}/authorized_keys
+      [ -f ${vmSsh}/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -N "" -C eldar-vm -f ${vmSsh}/ssh_host_ed25519_key
+    '';
+  };
 
   # The VM's link: a tap device the host routes and NATs. NetworkManager keeps
   # the real NICs; systemd-networkd only handles vm-*.
@@ -110,6 +131,7 @@ in
       shares = [
         { proto = "virtiofs"; tag = "ro-store"; source = "/nix/store"; mountPoint = "/nix/.ro-store"; }
         { proto = "virtiofs"; tag = "workspace"; source = workspace; mountPoint = "/home/eldar/workspace"; posixAcl = false; }
+        { proto = "virtiofs"; tag = "host-ssh"; source = vmSsh; mountPoint = "/etc/ssh/from-host"; posixAcl = false; readOnly = true; }
       ];
       # Relative images live in /var/lib/microvms/eldar on the host. Sparse:
       # they only take space as they fill. Rootless Docker's data lives in
@@ -159,7 +181,24 @@ in
     services.openssh = {
       enable = true;
       settings = { PasswordAuthentication = false; PermitRootLogin = "no"; };
+      hostKeys = [{ path = "/etc/ssh/from-host/ssh_host_ed25519_key"; type = "ed25519"; }];
+      # Logins the host grants, read through a command: sshd's StrictModes
+      # rejects key files under the share (owned by microvm.nix's user), and
+      # the command itself must be a root-owned file outside the group-
+      # writable /nix/store.
+      authorizedKeysCommand = "/etc/ssh/keys-from-host %u";
+      authorizedKeysCommandUser = "nobody";
     };
+    environment.etc."ssh/keys-from-host" = {
+      mode = "0755";
+      text = ''
+        #!${pkgs.bash}/bin/bash
+        f=/etc/ssh/from-host/authorized_keys/"$1"
+        [ -f "$f" ] && exec ${pkgs.coreutils}/bin/cat "$f"
+        exit 0
+      '';
+    };
+    systemd.services.sshd.unitConfig.RequiresMountsFor = [ "/etc/ssh/from-host" ];
     # The workspace mount creates /home/eldar before the user exists, as root;
     # put the homes right on every boot.
     systemd.tmpfiles.rules = [
