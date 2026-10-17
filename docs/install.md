@@ -110,6 +110,12 @@ VM_USER=nixos scripts/vm ssh -t 'sudo bash eldar-os/scripts/install.sh'
 disko (destroy → format → mount) and `nixos-install` from the flake, and leaves
 a copy of the config at `/etc/eldar-os`.
 
+**Reinstalling an existing machine:** `install.sh --keep-luks` recreates the
+filesystems inside the existing LUKS container instead of wiping the disk.
+Every key slot survives (no one re-enters a passphrase), and so does the
+machine's identity: SSH host keys (so it stays a secrets recipient), deploy
+keys and the secrets checkout. No re-enrollment needed.
+
 ## 6. Boot and verify
 
 ```bash
