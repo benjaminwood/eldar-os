@@ -7,5 +7,6 @@
     ./ben.nix
     ./eldar-vm.nix
     ./supervisor.nix
+    ./tailscale.nix
   ];
 }
