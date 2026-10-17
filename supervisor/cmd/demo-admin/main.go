@@ -184,6 +184,7 @@ func handler() http.Handler {
 	mux.HandleFunc("GET /admin/aws", func(w http.ResponseWriter, r *http.Request) {
 		send(w, map[string]any{"sessions": []any{map[string]any{"session": "corp", "signedIn": true}}, "profiles": state().AwsProfiles})
 	})
+	mux.HandleFunc("GET /admin/terminal", terminal)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { send(w, map[string]any{"ok": true}) })
 	return mux
 }

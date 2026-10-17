@@ -7,16 +7,18 @@ workspaces, one per task. Eldar, the long-running chief of staff, keeps track
 of them, and you step into any of them from your desk or your phone.
 
 The agents live in a microVM with no credentials of their own. Everything
-they do with a credential goes through the **supervisor** on the host: it
-decides what may run, asks a human when it should, runs the command, and
-records it. The whole machine is one flake, and the agents change it the same
+they do with a credential goes through the **supervisor** on the host, and by
+default each of those commands waits for a human to approve it, one at a
+time. A time-limited grant to one Claude session is the way to stop being
+asked. The whole machine is one flake, and the agents change it the same
 way a person would: they open a pull request, a human merges it, and the
 machine applies the change seconds later.
 
 <p align="center">
-  <img src="docs/screenshots/web-approvals.png" width="30%" alt="The web UI on a phone: four approvals waiting, each with its command, session, credentials and reason">
-  <img src="docs/screenshots/web-sessions.png" width="30%" alt="Sessions grouped by herdr workspace, showing which ones are waiting for a decision">
-  <img src="docs/screenshots/web-chat.png" width="30%" alt="Chatting with Eldar from a phone">
+  <img src="docs/screenshots/web-approvals.png" width="23%" alt="The web UI on a phone: four approvals waiting, each with its command, session, credentials and reason">
+  <img src="docs/screenshots/web-sessions.png" width="23%" alt="Sessions grouped by herdr workspace, showing which ones are waiting for a decision">
+  <img src="docs/screenshots/web-terminal.png" width="23%" alt="A Claude session's terminal taken over from a phone, with the approval it's waiting on shown above it">
+  <img src="docs/screenshots/web-chat.png" width="23%" alt="Chatting with Eldar from a phone">
 </p>
 
 <p align="center">
@@ -36,14 +38,21 @@ are marked where they appear.
   credentials it needs. The supervisor fetches them from 1Password (or mints
   short-lived AWS credentials from its own IAM Identity Center sign-in), runs
   the command in the VM, and returns only the output.
-- **A human approves what's risky.** A policy allows the routine, denies the
-  dangerous, and asks about the rest. Questions reach the TUI, a mobile-first
-  web UI (passkey-locked, push notifications with Approve / Deny), and a nudge
-  in the agent's own terminal pane. Every decision goes in an audit log.
-- **Grants instead of blanket trust.** Rather than switching approvals off, you
-  grant one session a scope (credentials, AWS roles, a host, a browser
-  profile) for a set time. Agents can ask for a grant, and you can narrow it
-  before approving.
+- **Every credentialed command is approved on its own.** When an agent needs
+  a credential, its command waits. You see exactly what will run, which
+  Claude session asked, which credentials it gets, and why. Approving runs
+  that one command, once; the next one asks again. A policy can let a few
+  routine commands through and refuses dangerous ones outright. Questions
+  reach the TUI, a mobile-first web UI (passkey-locked, push notifications
+  with Approve / Deny), and a nudge in the agent's own terminal pane. Every
+  decision goes in an audit log.
+- **Until you grant a session more.** When one Claude session is working
+  through something that needs many commands, give it a grant: a scope
+  (which credentials, AWS roles, host or browser profile) for a set time.
+  Inside that scope, that session's commands run without asking (the
+  policy's denies still apply); every other session still asks, and the
+  grant expires on its own. Agents can ask for a
+  grant, and you can narrow it before approving.
 - **Other machines, explicitly.** Agents can run commands on configured hosts
   (a Mac, first), with per-host allow lists and grants, and drive a real
   browser on them through a bridge, one approved 30-minute window at a time.
@@ -53,7 +62,7 @@ are marked where they appear.
   you can watch live from the web UI.
 - **Many agents, one desk.** Sessions are grouped by herdr workspace. From the
   web UI you can start one, watch its status, or take over its terminal from
-  your phone. Eldar is the one you chat with: other agents reach you through
+  your phone, with any approval it's waiting on shown above it. Eldar is the one you chat with: other agents reach you through
   it, and it carries your replies back.
 - **It changes its own system, quickly.** Eldar opens PRs against this repo
   with its own GitHub App. Only you can merge. A signed webhook tells the
@@ -95,8 +104,8 @@ runs, and [docs/decisions/](docs/decisions/) for why it's built this way.
 |---|---|
 | ![The web UI on a desktop](docs/screenshots/web-desktop.png) | ![TUI: sessions, with one session's grant](docs/screenshots/tui-sessions.png) |
 | The web UI on a desktop | TUI: sessions and their grants |
-| ![TUI: the activity log](docs/screenshots/tui-activity.png) | |
-| TUI: the activity log (allowed, denied, granted) | |
+| ![A Claude session's terminal in the web UI](docs/screenshots/web-terminal-desktop.png) | ![TUI: the activity log](docs/screenshots/tui-activity.png) |
+| A Claude session's terminal, waiting on an approval | TUI: the activity log (allowed, denied, granted) |
 
 ## The repo
 

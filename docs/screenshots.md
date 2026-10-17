@@ -21,6 +21,13 @@ that changed them.
 - **Web UI.** `supervisor web` in its loopback development mode (no tailnet, no
   passkey lock) points at the demo socket, and Playwright (pinned image)
   shoots it at phone and desktop sizes.
+- **Terminal takeover.** demo-admin also answers `/admin/terminal` (in the
+  real supervisor, `herdr terminal attach` on a pane in Eldar's VM) by drawing
+  a made-up Claude Code session at the size the browser asks for. The shots
+  cancel one rendering quirk of headless Chromium on Linux: it snaps glyph
+  advances to whole pixels inside xterm's rows but not where xterm measures,
+  so the DOM renderer's letter-spacing overshoots and the last column drifts
+  out of view.
 - **TUI.** The real TUI runs in a detached 120×34 tmux. Each screen is captured
   with its colours and replayed into xterm.js (the copy the web UI vendors),
   which Playwright shoots. A real terminal emulator renders the TUI faithfully.

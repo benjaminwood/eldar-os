@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/benjaminwood/eldar-os/supervisor/api"
 )
@@ -77,6 +78,26 @@ func TestDemoDataIsMadeUp(t *testing.T) {
 	for _, e := range email.FindAllString(all.String(), -1) {
 		if d := e[strings.LastIndex(e, "@")+1:]; !regexp.MustCompile(`^example\.(com|org|net)$`).MatchString(d) {
 			t.Errorf("%s isn't at an example domain", e)
+		}
+	}
+}
+
+// The takeover view's terminal: a full screen at the asked size, redrawn on
+// resize.
+func TestDemoTerminal(t *testing.T) {
+	srv := httptest.NewServer(handler())
+	defer srv.Close()
+	for _, size := range [][2]int{{46, 30}, {140, 40}} {
+		s := session(size[0], size[1])
+		lines := strings.Split(strings.TrimPrefix(s, "\x1b[2J\x1b[H\x1b[?25l"), "\r\n")
+		if len(lines) != size[1] {
+			t.Errorf("%dx%d: %d lines", size[0], size[1], len(lines))
+		}
+		plain := regexp.MustCompile("\x1b\\[[0-9;?]*[a-zA-Z]")
+		for i, l := range lines {
+			if n := utf8.RuneCountInString(plain.ReplaceAllString(l, "")); n > size[0] {
+				t.Errorf("%dx%d: line %d is %d wide: %q", size[0], size[1], i, n, l)
+			}
 		}
 	}
 }

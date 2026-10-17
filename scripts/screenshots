@@ -51,13 +51,13 @@ for shot in "1 approvals" "2 sessions" "5 activity"; do
   sleep 1.5
   tmux capture-pane -t "$tmux_session" -e -p >"$work/tui-$2.ansi"
 done
-cp supervisor/web/static/vendor/{xterm.js,xterm.css,addon-unicode11.js} "$work/"
+cp supervisor/web/static/vendor/{xterm.js,xterm.css,addon-unicode11.js,JetBrainsMono-Regular.woff2,JetBrainsMono-Bold.woff2} "$work/"
 cat >"$work/tui.html" <<'EOF'
 <!doctype html><meta charset="utf-8">
 <style>
-  /* The full font: Google Fonts' subset has no box drawing, which then falls back to a narrower font. */
-  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url(https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/fonts/webfonts/JetBrainsMono-Regular.woff2); }
-  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url(https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/fonts/webfonts/JetBrainsMono-Bold.woff2); }
+  /* The full font, as the web UI's terminal uses: Google Fonts' subset has no box drawing. */
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url(JetBrainsMono-Regular.woff2); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url(JetBrainsMono-Bold.woff2); }
 </style>
 <link rel="stylesheet" href="xterm.css">
 <style>
@@ -86,6 +86,22 @@ with sync_playwright() as p:
         pg.wait_for_selector("#tabs button", timeout=15000)
         pg.wait_for_timeout(1500)
         pg.locator(f'#tabs button[data-tab="{tab}"]').first.click()
+        pg.wait_for_timeout(1500)
+        pg.screenshot(path=f"{out}/{name}.png")
+        pg.close()
+    # The takeover view on a Claude session's pane (demo-admin draws the pane).
+    for name, ((w, h), dpr) in (("web-terminal", phone), ("web-terminal-desktop", desktop)):
+        pg = b.new_page(viewport={"width": w, "height": h}, device_scale_factor=dpr, color_scheme="dark")
+        pg.goto(url)
+        pg.wait_for_selector("#tabs button", timeout=15000)
+        pg.wait_for_timeout(1500)
+        pg.evaluate("window.eldarTerm.openTerminal('w1:p3', 'primary / billing-retries')")
+        pg.wait_for_selector(".term-view.live", timeout=15000)
+        # Headless Chromium on Linux hints JetBrains Mono to whole-pixel
+        # advances inside xterm's rows but not where xterm measures it, so the
+        # DOM renderer's letter-spacing overshoots and the last column drifts
+        # out of view. Real devices don't hint like that; undo it here only.
+        pg.add_style_tag(content=".xterm-rows { letter-spacing: 0 !important; }")
         pg.wait_for_timeout(1500)
         pg.screenshot(path=f"{out}/{name}.png")
         pg.close()
