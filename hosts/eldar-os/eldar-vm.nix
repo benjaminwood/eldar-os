@@ -20,6 +20,10 @@
     systemd.user.services.herdr = {
       description = "herdr server";
       wantedBy = [ "default.target" ];
+      # Every pane (Claude sessions, shells) lives under this server: an
+      # update never restarts it. A new herdr is used from the VM's next
+      # restart (docs/decisions/0010-eldar-vm-updates-in-place.md).
+      restartIfChanged = false;
       unitConfig.ConditionUser = "eldar";
       path = [ herdr pkgs.jq pkgs.coreutils pkgs.bash pkgs.zsh ];
       serviceConfig = {
@@ -99,9 +103,19 @@
             fi
             pane=$(h pane list --workspace "$ws" | jq -c --arg t "$tab" '[.result.panes[] | select(.tab_id == $t)][0] // empty')
             [[ -z $pane ]] && continue
-            if [[ $(jq -r '.agent // empty' <<<"$pane") == claude ]]; then misses=0; continue; fi
-            misses=$((misses + 1)); ((misses < 2)) && continue
             pane_id=$(jq -r '.pane_id' <<<"$pane")
+            if [[ $(jq -r '.agent // empty' <<<"$pane") == claude ]]; then
+              # Running, but is it Eldar's Claude? herdr resumes agents after
+              # a restart with a plain `claude --resume`, without the chat
+              # channel. Stop that one; the next checks resume it properly.
+              fg=$(h pane process-info --pane "$pane_id" | jq -c '.result.process_info.foreground_processes[0] // empty')
+              if [[ -n $fg && $(jq -r .cmdline <<<"$fg") != *"server:chat"* ]]; then
+                log "Claude in $pane_id runs without Eldar's flags ($(jq -r .cmdline <<<"$fg")); restarting it"
+                kill "$(jq -r .pid <<<"$fg")"
+              fi
+              misses=0; continue
+            fi
+            misses=$((misses + 1)); ((misses < 2)) && continue
             id=$(eldar_session)
             if [[ -n $id ]]; then
               log "Claude isn't running in $pane_id; resuming $NAME ($id)"; args=("''${CLAUDE_ARGS[@]}" --resume "$id")
@@ -144,7 +158,7 @@
 
     environment.systemPackages = with pkgs; [
       # general
-      git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd
+      git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file
       # runtimes
       nodejs_22 typescript eslint bun go
       (python3.withPackages (ps: with ps; [ numpy scipy pillow rectpack ]))

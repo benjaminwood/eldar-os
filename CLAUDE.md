@@ -60,6 +60,9 @@ may push to staging `main` directly; commits are signed with
    with `DOTFILES=~/projects/benjaminwood/dotfiles scripts/try`, push the
    dotfiles commit, then `scripts/check --lock` to bump the pin.
 4. Don't stack blocking waits on long operations; check state directly.
+5. Never restart Eldar's VM or herdr to apply a change: changes reach the VM
+   in place (decision 0010). Services that hold work (herdr, rootless Docker)
+   must keep `restartIfChanged = false`.
 
 ## Working here
 

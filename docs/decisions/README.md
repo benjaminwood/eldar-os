@@ -18,3 +18,4 @@ the old one *Superseded by NNNN*. Don't rewrite history.
 | [0007](0007-xfs.md) | XFS instead of btrfs | Accepted |
 | [0008](0008-eldar-microvm.md) | Eldar's environment is a microVM; the host is the control plane | Accepted |
 | [0009](0009-supervisor.md) | The supervisor: a Go rewrite that runs commands in Eldar's VM | Accepted |
+| [0010](0010-eldar-vm-updates-in-place.md) | Eldar's VM is updated in place, never restarted for software | Accepted |

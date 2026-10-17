@@ -66,6 +66,12 @@ in
     script = ''
       install -d -m 0755 ${vmSsh} ${vmSsh}/authorized_keys
       [ -f ${vmSsh}/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -N "" -C eldar-vm -f ${vmSsh}/ssh_host_ed25519_key
+      # The host's own key into the VM as root (only for eldar-vm-update; root
+      # on the host is already more privileged than anything in the VM).
+      [ -f ${vmSsh}/admin ] || ssh-keygen -q -t ed25519 -N "" -C eldar-vm-admin -f ${vmSsh}/admin
+      chmod 0600 ${vmSsh}/admin
+      install -m 0644 ${vmSsh}/admin.pub ${vmSsh}/authorized_keys/root
+      echo "${vmAddr} $(cut -d' ' -f1,2 ${vmSsh}/ssh_host_ed25519_key.pub)" > ${vmSsh}/known_hosts_admin
     '';
   };
 
@@ -111,11 +117,63 @@ in
   networking.firewall.trustedInterfaces = [ "vm-eldar" ];
 
   microvm.autostart = [ "eldar" ];
-  # Applying the host never restarts Eldar's VM: Ben and the agents work in
-  # there, and a restart ends every session. A changed VM config takes effect
-  # at the VM's next restart (a host reboot, or `systemctl restart
-  # microvm@eldar` at a chosen moment).
+  # Applying the host never blindly restarts Eldar's VM: Ben and the agents
+  # work in there (Eldar included), and a restart ends every session.
+  # eldar-vm-update below switches the VM's system in place instead, and
+  # restarts it only for hardware changes.
   microvm.vms.eldar.restartIfChanged = false;
+
+  # Bring the VM up to date on every host switch that changes it:
+  #   - hardware changed (CPUs, memory, shares, network, disks — the
+  #     hypervisor's arguments, store paths aside): restart the VM;
+  #   - otherwise: switch its system in place, over SSH as root
+  #     (switch-to-configuration test; the new system is already in the
+  #     host's store, which the VM reads). Running sessions keep going.
+  # A new kernel isn't hardware: it's used from the VM's next restart.
+  # A failed switch fails this unit, so the apply's health check rolls the
+  # host back, which runs this again with the previous system.
+  systemd.services.eldar-vm-update =
+    let
+      guest = config.microvm.vms.eldar.config.config;
+      toplevel = guest.system.build.toplevel;
+      runner = guest.microvm.declaredRunner;
+      dir = "/var/lib/microvms/eldar";
+    in {
+      description = "Bring Eldar's VM up to date (in place unless its hardware changed)";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "eldar-vm-ssh.service" "install-microvm-eldar.service" ];
+      requires = [ "eldar-vm-ssh.service" ];
+      restartTriggers = [ toplevel runner ];
+      path = [ pkgs.openssh pkgs.coreutils pkgs.gnused pkgs.diffutils pkgs.systemd ];
+      serviceConfig = { Type = "oneshot"; RemainAfterExit = true; TimeoutStartSec = "10min"; };
+      script = ''
+        ln -sTf ${runner} ${dir}/current
+        ln -sTf ${toplevel} ${dir}/toplevel
+        if ! systemctl is-active -q microvm@eldar; then
+          echo "Eldar's VM isn't running; it starts with this config"
+          exit 0
+        fi
+        norm() { sed -E 's|/nix/store/[^ \x27"]*|<store>|g' "$1/bin/microvm-run"; }
+        if ! cmp -s <(norm ${dir}/booted) <(norm ${runner}); then
+          echo "Eldar's VM hardware changed; restarting it:"
+          diff <(norm ${dir}/booted) <(norm ${runner}) | head -20 || true
+          systemctl restart microvm@eldar
+          exit 0
+        fi
+        ssh_vm() {
+          ssh -i ${vmSsh}/admin -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${vmSsh}/known_hosts_admin \
+            -o ConnectTimeout=5 root@${vmAddr} "$@"
+        }
+        for _ in $(seq 60); do ssh_vm true 2>/dev/null && break; sleep 2; done
+        if [ "$(ssh_vm readlink -f /run/current-system)" = "${toplevel}" ]; then
+          echo "Eldar's VM already runs ${toplevel}"
+          exit 0
+        fi
+        echo "switching Eldar's VM in place to ${toplevel}"
+        ssh_vm ${toplevel}/bin/switch-to-configuration test
+      '';
+    };
   # Machines without (nested) KVM, e.g. some CI runners, skip the VM rather
   # than fail.
   systemd.services."microvm@eldar".unitConfig.ConditionPathExists = "/dev/kvm";
@@ -185,7 +243,8 @@ in
     };
     services.openssh = {
       enable = true;
-      settings = { PasswordAuthentication = false; PermitRootLogin = "no"; };
+      # Root only with a key, which only the host has (eldar-vm-update).
+      settings = { PasswordAuthentication = false; PermitRootLogin = "prohibit-password"; };
       hostKeys = [{ path = "/etc/ssh/from-host/ssh_host_ed25519_key"; type = "ed25519"; }];
       # Logins the host grants, read through a command: sshd's StrictModes
       # rejects key files under the share (owned by microvm.nix's user), and
@@ -219,6 +278,8 @@ in
     environment.extraInit = "umask 002";
     # Docker runs as eldar (a container that mounts / gets eldar's files, not root).
     virtualisation.docker.rootless = { enable = true; setSocketVariable = true; };
+    # Containers live under it: an update never restarts it.
+    systemd.user.services.docker.restartIfChanged = false;
     # No firewall inside: the host enforces Eldar's network policy at the tap,
     # where Eldar can't change it. A guest firewall adds nothing, and NixOS's
     # (strict reverse-path filter, input rules) breaks Docker's TCP egress.
