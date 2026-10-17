@@ -154,6 +154,7 @@ func runWeb(args []string) {
 	user := fs.String("allow-user", os.Getenv("WEB_ALLOWED_USER"), "tailnet login allowed to use the UI")
 	listen := fs.String("dev-listen", "", "serve plain HTTP here with NO auth (development; loopback only)")
 	browserDevice := fs.String("browser-device", os.Getenv("WEB_BROWSER_DEVICE"), "tailnet machine Eldar's browser runs on; refused while it's driven")
+	streamHost := fs.String("stream-host", os.Getenv("WEB_STREAM_HOST"), "tailnet machine serving the agents' browser stream (the Browser tab)")
 	static := fs.String("static-dir", os.Getenv("WEB_STATIC_DIR"), "serve UI files from this dir instead of the embedded copy")
 	_ = fs.Parse(args)
 
@@ -169,7 +170,7 @@ func runWeb(args []string) {
 	defer stop()
 	err := web.Run(ctx, web.Config{
 		Client: api.New(path), Hostname: *hostname, StateDir: *state, AuthKeyFile: *authKey,
-		AllowedUser: *user, Listen: *listen, StaticDir: *static, BrowserDevice: *browserDevice,
+		AllowedUser: *user, Listen: *listen, StaticDir: *static, BrowserDevice: *browserDevice, StreamHost: *streamHost,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "supervisor web:", err)

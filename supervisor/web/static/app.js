@@ -250,12 +250,30 @@ function renderChrome() {
   document.title = unread ? `(${unread}) Eldar` : "Eldar";
 }
 
+// The Browser tab: the agents' own browser (the VM's Chrome) streamed from
+// its own tailnet origin, in a frame created once and kept while you switch
+// tabs. Being cross-origin, nothing on that page can reach this UI's session.
+function showStream(on) {
+  const el = $("#stream");
+  if (!el) return;
+  if (on && !el.firstChild) {
+    el.innerHTML = `<iframe title="Agents' browser" allow="clipboard-read; clipboard-write; fullscreen; autoplay"></iframe>
+      <a class="stream-pop" href="${esc(el.dataset.src)}" target="_blank" rel="noopener">Open in its own window ↗</a>`;
+    el.firstChild.src = el.dataset.src;
+  }
+  el.hidden = !on;
+  document.body.classList.toggle("stream-open", on);
+}
+
 function renderMain() {
   const main = $("#main");
   const chat = S.tab === "chat";
-  main.hidden = chat;
+  const browser = S.tab === "browser" && !!$("#stream");
+  main.hidden = chat || browser;
+  showStream(browser);
   if (chat) { window.eldarChat?.show(); renderBulk(); return; }
   window.eldarChat?.hide();
+  if (browser) { renderBulk(); return; }
   let html;
   if (!S.data) {
     html = `<div class="empty"><div class="big-sigil">✦</div><h2>Connecting…</h2><p>${esc(S.downMsg || "Reaching the supervisor")}</p></div>`;

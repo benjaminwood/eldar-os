@@ -18,6 +18,11 @@ in
       options = {
         hostname = lib.mkOption { type = lib.types.str; description = "Tailnet machine name."; };
         target = lib.mkOption { type = lib.types.str; description = "URL to forward to, e.g. http://10.42.0.2:3000."; };
+        frameHosts = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Tailnet machines whose HTTPS origin may frame this page.";
+        };
         environmentFile = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -37,6 +42,7 @@ in
     environment = {
       PROXY_HOSTNAME = p.hostname;
       PROXY_TARGET = p.target;
+      PROXY_FRAME_HOSTS = lib.concatStringsSep " " p.frameHosts;
       PROXY_STATE_DIR = "/var/lib/tailnet-proxy-${name}";
       HOME = "/var/lib/tailnet-proxy-${name}";
     };

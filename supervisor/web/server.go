@@ -51,6 +51,10 @@ type Config struct {
 	// Ben's Mac). While any Arc window is approved, that device is refused, so a
 	// page Eldar controls can't answer its own approvals.
 	BrowserDevice string
+	// StreamHost is the tailnet machine serving the agents' own browser stream
+	// (tailnet-proxy → the VM's Chrome). The Browser tab frames it: a separate
+	// origin, so nothing on that page can act as this UI.
+	StreamHost string
 }
 
 type server struct {
@@ -58,6 +62,7 @@ type server struct {
 	lc     *local.Client
 	push   *pusher
 	keys   *passkeys // nil until the tailnet HTTPS name is known
+	stream string    // https://<StreamHost>.<tailnet>, or ""
 	static fs.FS
 }
 
@@ -111,6 +116,9 @@ func Run(ctx context.Context, cfg Config) error {
 		return errors.New("tailnet has no HTTPS certificate domain — enable HTTPS in the Tailscale admin console")
 	}
 	srv.push.origin = "https://" + domains[0]
+	if _, suffix, ok := strings.Cut(domains[0], "."); ok && cfg.StreamHost != "" {
+		srv.stream = "https://" + cfg.StreamHost + "." + suffix
+	}
 	if srv.keys, err = newPasskeys(cfg.StateDir, domains[0]); err != nil {
 		return fmt.Errorf("passkeys: %w", err)
 	}
@@ -193,7 +201,7 @@ func (s *server) routes(auth bool) http.Handler {
 		h = s.requireUnlock(h)
 		h = s.whois(h)
 	}
-	return securityHeaders(h)
+	return s.securityHeaders(h)
 }
 
 type ctxKey string
@@ -269,10 +277,14 @@ func guard(next http.Handler) http.Handler {
 	})
 }
 
-func securityHeaders(next http.Handler) http.Handler {
+func (s *server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' wss://"+r.Host+"; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		frames := ""
+		if s.stream != "" {
+			frames = "frame-src " + s.stream + "; " // only the stream, in its own origin
+		}
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' wss://"+r.Host+"; "+frames+"frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Content-Type-Options", "nosniff")
@@ -292,6 +304,7 @@ func (s *server) index(w http.ResponseWriter, r *http.Request) {
 	_ = tmpl.Execute(w, map[string]any{
 		"ThemeVars": template.CSS(view.CSSVars()),
 		"Device":    device,
+		"Stream":    s.stream,
 	})
 }
 

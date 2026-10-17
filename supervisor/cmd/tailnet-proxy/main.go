@@ -6,7 +6,9 @@
 //
 // Configured by environment: PROXY_HOSTNAME (tailnet name), PROXY_STATE_DIR
 // (tsnet state; a one-time auth key in authkey there), PROXY_TARGET (e.g.
-// http://10.42.0.2:3000), PROXY_ALLOWED_USER (tailnet login).
+// http://10.42.0.2:3000), PROXY_ALLOWED_USER (tailnet login), and optionally
+// PROXY_FRAME_HOSTS: tailnet machines whose HTTPS origin may frame this page
+// (e.g. the supervisor web UI's Browser tab); no one else may.
 package main
 
 import (
@@ -64,6 +66,24 @@ func main() {
 		log.Printf("tailnet-proxy: https://%s → %s (for %s)", d[0], target, allowed)
 	}
 	rp := httputil.NewSingleHostReverseProxy(target)
+	// Framing: only by the listed tailnet machines' HTTPS origins.
+	ancestors := "'none'"
+	if d := ts.CertDomains(); len(d) > 0 {
+		if _, suffix, ok := strings.Cut(d[0], "."); ok {
+			var origins []string
+			for _, h := range strings.Fields(strings.ReplaceAll(os.Getenv("PROXY_FRAME_HOSTS"), ",", " ")) {
+				origins = append(origins, "https://"+h+"."+suffix)
+			}
+			if len(origins) > 0 {
+				ancestors = strings.Join(origins, " ")
+			}
+		}
+	}
+	rp.ModifyResponse = func(res *http.Response) error {
+		res.Header.Del("X-Frame-Options")
+		res.Header.Set("Content-Security-Policy", "frame-ancestors "+ancestors)
+		return nil
+	}
 	srv := &http.Server{Handler: admit(lc, allowed, rp), ReadHeaderTimeout: 10 * time.Second}
 	go func() { <-ctx.Done(); srv.Close() }()
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

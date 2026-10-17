@@ -42,6 +42,11 @@ in
         default = null;
         description = "WEB_ALLOWED_USER (tailnet login allowed in), WEB_BROWSER_DEVICE, …";
       };
+      streamHost = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Tailnet machine streaming the agents' browser; the web UI's Browser tab frames it.";
+      };
     };
     hostsFile = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -118,6 +123,9 @@ in
       environment = {
         SUPERVISOR_SOCKET = "/run/supervisor/admin.sock";
         WEB_HOSTNAME = cfg.web.hostname;
+      } // lib.optionalAttrs (cfg.web.streamHost != null) {
+        WEB_STREAM_HOST = cfg.web.streamHost;
+      } // {
         WEB_STATE_DIR = "/var/lib/supervisor-web";
         TS_AUTHKEY_FILE = "/var/lib/supervisor-web/authkey";
         HOME = "/var/lib/supervisor-web";

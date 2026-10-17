@@ -15,6 +15,7 @@
       enable = true;
       # A new name while the old eldar-proxy still runs; renamed at cutover.
       hostname = "supervisor-next";
+      streamHost = config.eldar-os.tailnetProxies.chrome.hostname; # the Browser tab
       environmentFile = config.sops.secrets.supervisor-web-env.path;
     };
   };
@@ -23,6 +24,7 @@
   eldar-os.tailnetProxies.chrome = {
     hostname = "eldar-chrome-next";
     target = "http://${config.eldar-os.eldarVm.address}:3000";
+    frameHosts = [ config.eldar-os.supervisor.web.hostname ]; # the web UI's Browser tab
     environmentFile = config.sops.secrets.supervisor-web-env.path;
   };
   sops.secrets.supervisor-web-env = {
