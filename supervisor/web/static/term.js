@@ -42,7 +42,7 @@ const T = { pending: null, prepared: null };
 async function apiRaw(method, path, body, headers = {}) {
   const res = await fetch(path, {
     method,
-    headers: { "X-Eldar-Proxy": "1", "Content-Type": "application/json", ...headers },
+    headers: { "X-Supervisor": "1", "Content-Type": "application/json", ...headers },
     body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));

@@ -29,6 +29,7 @@ const (
 // ExecRequest is the body of POST /exec.
 type ExecRequest struct {
 	Command        string          `json:"command,omitempty"`
+	Script         string          `json:"script,omitempty"` // run verbatim under bash
 	Args           []string        `json:"args"` // present but empty ([]) still joins with a space, as before
 	File           string          `json:"file,omitempty"`
 	MCP            json.RawMessage `json:"mcp,omitempty"`
@@ -120,16 +121,16 @@ func (s *Supervisor) HandleExec(ctx context.Context, req ExecRequest) response {
 	}
 
 	n := 0
-	for _, set := range []bool{len(req.MCP) > 0, req.File != "", req.Command != ""} {
+	for _, set := range []bool{len(req.MCP) > 0, req.File != "", req.Command != "", req.Script != ""} {
 		if set {
 			n++
 		}
 	}
 	if n == 0 {
-		return fail(400, id, OutBadRequest, "Missing 'mcp', 'file', or 'command' field")
+		return fail(400, id, OutBadRequest, "Missing 'script', 'command', 'file', or 'mcp' field")
 	}
 	if n > 1 {
-		return fail(400, id, OutBadRequest, "'mcp', 'file', and 'command' are mutually exclusive")
+		return fail(400, id, OutBadRequest, "'script', 'command', 'file', and 'mcp' are mutually exclusive")
 	}
 	if len(req.MCP) > 0 {
 		return fail(400, id, OutBadRequest, "MCP calls aren't available on this supervisor yet.")
@@ -146,7 +147,9 @@ func (s *Supervisor) HandleExec(ctx context.Context, req ExecRequest) response {
 	}
 
 	var full, shell string
-	if req.File != "" {
+	if req.Script != "" {
+		full, shell = req.Script, req.Script
+	} else if req.File != "" {
 		content, err := s.runner.ReadFile(ctx, req.File)
 		if err != nil {
 			return fail(400, id, OutBadRequest, "Failed to read command file: "+err.Error())

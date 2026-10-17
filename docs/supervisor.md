@@ -35,6 +35,19 @@ they share). Nix: `modules/supervisor.nix`, configured in
 Develop: `scripts/go test ./...`, then `scripts/try` (the Nix build runs the
 tests too).
 
+## Agents' client: the MCP server
+
+Claude sessions in Eldar's VM reach the supervisor through its MCP server,
+`supervisor mcp` (stdio), registered for `eldar` and `ben` in `~/.claude.json`
+by `claude-mcp-<user>` (`modules/eldar-vm.nix`). Tools: `supervisor_exec`
+(run a command with credentials; the text runs verbatim under bash, as `ben`),
+`supervisor_request_grant`, `supervisor_policy_check`, `supervisor_audit`,
+`supervisor_credentials`, `supervisor_status`. It names the 1Password profiles
+and the default one from `/status`, so they stay configuration
+(`SUPERVISOR_DEFAULT_PROFILE` in `supervisor-env`). Each process makes a
+random session key at start, which the supervisor pins to the session ID. A
+session picks the server up when it starts.
+
 ## herdr and live terminals
 
 herdr runs in Eldar's VM as `eldar` (a user service, with a `primary`

@@ -199,6 +199,15 @@ func TestExecFileModeAndArgsJoin(t *testing.T) {
 	if got := r.specs[0].Shell; got != "allowed thing | tee out" {
 		t.Fatalf("file mode runs verbatim: %q", got)
 	}
+	// script: the text itself, verbatim (what the MCP server sends).
+	script := "allowed 'a b' \"$X\" | tee out"
+	s.HandleExec(ctx, ExecRequest{Script: script, Profile: "work", Credentials: creds()})
+	if got := r.specs[1].Shell; got != script {
+		t.Fatalf("script runs verbatim: %q", got)
+	}
+	if res := s.HandleExec(ctx, ExecRequest{Script: "x", Command: "y", Profile: "work"}); res.status != 400 {
+		t.Fatalf("script and command together: %d", res.status)
+	}
 	// args present but empty still joins with a space, as before.
 	var req ExecRequest
 	json.Unmarshal([]byte(`{"command":"allowed","args":[],"profile":"work","credentials":[]}`), &req)

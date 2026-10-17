@@ -62,7 +62,7 @@ func (m *model) View() string {
 }
 
 func (m *model) header() string {
-	brand := gradient("✦ E L D A R", t.Accent, t.Cyan, true) + sDim.Render("  credential proxy")
+	brand := gradient("✦ E L D A R", t.Accent, t.Cyan, true) + sDim.Render("  supervisor")
 
 	var mode string
 	switch m.st.Mode {
@@ -224,7 +224,7 @@ func (m *model) helpView() string {
 	})
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, "    ", right)
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(c(t.Accent)).Padding(1, 2).
-		Render(gradient("✦ eldar-proxy", t.Accent, t.Cyan, true) + "\n\n" + body + sFaint.Render("any key to close"))
+		Render(gradient("✦ supervisor", t.Accent, t.Cyan, true) + "\n\n" + body + sFaint.Render("any key to close"))
 }
 
 // overlay centers box over base, dimming everything underneath.

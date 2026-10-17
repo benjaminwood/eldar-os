@@ -129,11 +129,11 @@ func (m *model) sessionDetail(w, h int) string {
 	switch {
 	case s.KeyMismatches > 0:
 		rows = append(rows, sRed.Render(fmt.Sprintf("⚠ %d request%s claimed this session with a different key", s.KeyMismatches, plural(s.KeyMismatches, "s")))+
-			sDim.Render(" — a restarted proxy-mcp, or an impostor. ")+sAccent.Render("u")+sDim.Render(" re-pins."))
+			sDim.Render(" — a restarted supervisor client, or an impostor. ")+sAccent.Render("u")+sDim.Render(" re-pins."))
 	case s.Pinned:
 		rows = append(rows, sMint.Render("✓ key pinned")+sDim.Render(" — session-specific grants apply only to this session"))
 	case s.SeenByProxy:
-		rows = append(rows, sOrange.Render("○ no key")+sDim.Render(" — this session's proxy-mcp predates session keys; session grants won't match until it restarts"))
+		rows = append(rows, sOrange.Render("○ no key")+sDim.Render(" — this session's supervisor client predates session keys; session grants won't match until it restarts"))
 	default:
 		rows = append(rows, sDim.Render("○ hasn't called the proxy yet — its key pins on the first call"))
 	}

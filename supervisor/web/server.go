@@ -1,4 +1,4 @@
-// Package web serves the eldar-proxy web UI on the tailnet.
+// Package web serves the supervisor web UI on the tailnet.
 //
 // The server joins the tailnet itself (tsnet) as its own node and listens only
 // there, over HTTPS. Every request is checked with Tailscale's WhoIs: only
@@ -234,7 +234,7 @@ func (s *server) browserDriven(ctx context.Context) bool {
 	return err != nil || len(st.BrowserGrants) > 0
 }
 
-// guard blocks cross-site writes: every non-GET needs X-Eldar-Proxy, and a
+// guard blocks cross-site writes: every non-GET needs X-Supervisor, and a
 // browser's own Origin / Sec-Fetch-Site must say same-origin when present.
 func guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -243,8 +243,8 @@ func guard(next http.Handler) http.Handler {
 			return
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			if r.Header.Get("X-Eldar-Proxy") != "1" {
-				http.Error(w, "missing X-Eldar-Proxy header", http.StatusForbidden)
+			if r.Header.Get("X-Supervisor") != "1" {
+				http.Error(w, "missing X-Supervisor header", http.StatusForbidden)
 				return
 			}
 			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" {

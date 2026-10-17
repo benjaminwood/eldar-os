@@ -50,6 +50,7 @@ func runServe(args []string) {
 		OpBin:                 env("OP_PATH", "op"),
 		OpTimeout:             ms("OP_TIMEOUT_MS", 15_000),
 		AgentUser:             env("SUPERVISOR_AGENT_USER", "eldar"),
+		DefaultProfile:        os.Getenv("SUPERVISOR_DEFAULT_PROFILE"),
 		HerdrSession:          env("HERDR_SESSION", "default"),
 		ChatWorkspace:         env("CHAT_WORKSPACE", "primary"),
 		ChatTab:               env("CHAT_TAB", "Eldar"),

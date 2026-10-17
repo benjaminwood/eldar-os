@@ -38,6 +38,7 @@ type Config struct {
 	OpTimeout time.Duration
 
 	AgentUser string // the unprivileged agent user (cron checks, herdr)
+	DefaultProfile string // the profile agents use unless told otherwise
 
 	HerdrSession string      // herdr session the UIs show by default
 	ChatWorkspace, ChatTab string // where Eldar, the chief-of-staff session, lives in herdr

@@ -1,4 +1,4 @@
-// eldar-proxy web UI. Talks only to this server's /api, which relays to the
+// Supervisor web UI. Talks only to this server's /api, which relays to the
 // proxy's admin API — the same interface the TUI uses.
 "use strict";
 
@@ -31,7 +31,7 @@ if (S.tab === "connections") S.tab = "settings";
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
-    headers: { "X-Eldar-Proxy": "1", ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: { "X-Supervisor": "1", ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const txt = await res.text();
@@ -258,7 +258,7 @@ function renderMain() {
   window.eldarChat?.hide();
   let html;
   if (!S.data) {
-    html = `<div class="empty"><div class="big-sigil">✦</div><h2>Connecting…</h2><p>${esc(S.downMsg || "Reaching the credential proxy")}</p></div>`;
+    html = `<div class="empty"><div class="big-sigil">✦</div><h2>Connecting…</h2><p>${esc(S.downMsg || "Reaching the supervisor")}</p></div>`;
   } else {
     html = banner() + ({ approvals: viewApprovals, sessions: viewSessions, grants: viewGrants, settings: viewSettings, activity: viewActivity }[S.tab] || viewApprovals)();
   }
@@ -550,9 +550,9 @@ function sessionSheet(id) {
   if (!s) return `<h2>Session gone</h2><p class="lead">It's no longer listed.</p><div class="sheet-actions"><button class="btn btn-ghost" data-action="close">Close</button></div>`;
   const d = S.data;
   let key;
-  if (s.keyMismatches) key = `<span class="bad">⚠ ${plural(s.keyMismatches, "request")} claimed this session with a different key</span> — a restarted proxy-mcp, or an impostor.`;
+  if (s.keyMismatches) key = `<span class="bad">⚠ ${plural(s.keyMismatches, "request")} claimed this session with a different key</span> — a restarted supervisor client, or an impostor.`;
   else if (s.pinned) key = `<span class="ok">✓ pinned</span> — session grants apply only to this session`;
-  else if (s.seenByProxy) key = `<span class="warn">○ no key</span> — its proxy-mcp predates session keys; session grants match after it restarts`;
+  else if (s.seenByProxy) key = `<span class="warn">○ no key</span> — its supervisor client predates session keys; session grants match after it restarts`;
   else key = `<span class="dim">pins on its first call</span>`;
   const hasFull = d.grants.some((g) => isEldarGrant(g) && g.session === id && fullGrant(g));
   const specific = d.grants.filter((g) => g.session === id).length;

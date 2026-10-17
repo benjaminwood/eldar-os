@@ -1,4 +1,4 @@
-// eldar-proxy service worker: shows approval notifications and handles their
+// Supervisor service worker: shows approval notifications and handles their
 // Approve / Deny actions. No offline caching — the UI is only useful live.
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -43,7 +43,7 @@ self.addEventListener("notificationclick", (e) => {
     e.waitUntil(
       fetch("/api/decide", {
         method: "POST",
-        headers: { "X-Eldar-Proxy": "1", "Content-Type": "application/json" },
+        headers: { "X-Supervisor": "1", "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [id], decision }),
       }).then(async (r) => {
         if (r.status === 401) return openApp(id);

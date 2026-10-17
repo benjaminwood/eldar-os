@@ -17,6 +17,7 @@ let
   workspace = "/srv/eldar/workspace";
   eldarUid = 1500;
   workspaceGid = 1500; # same number on host and in the VM, so group perms line up
+  supervisor = config.eldar-os.supervisor.package; # its `mcp` subcommand is the agents' client
 in
 {
   options.eldar-os.eldarVm = {
@@ -262,14 +263,14 @@ in
         exit 0
       '';
     };
-    systemd.services.sshd.unitConfig.RequiresMountsFor = [ "/etc/ssh/from-host" ];
     # The workspace mount creates /home/eldar before the user exists, as root;
     # put the homes right on every boot.
     systemd.tmpfiles.rules = [
       "d /home/eldar 0750 eldar eldar-ws -"
       "d /home/ben 0700 ben users -"
     ];
-    # The supervisor, as agents in here reach it (PROXY_URL for older clients).
+    # The supervisor, as agents in here reach it (PROXY_URL for clients not
+    # yet moved over from the old setup).
     environment.variables = {
       SUPERVISOR_URL = "http://${hostAddr}:${toString supervisorPort}";
       PROXY_URL = "http://${hostAddr}:${toString supervisorPort}";
@@ -284,7 +285,31 @@ in
     # where Eldar can't change it. A guest firewall adds nothing, and NixOS's
     # (strict reverse-path filter, input rules) breaks Docker's TCP egress.
     networking.firewall.enable = false;
-    environment.systemPackages = with pkgs; [ git curl jq ];
+    environment.systemPackages = (with pkgs; [ git curl jq ]) ++ [ supervisor ];
+    # Every Claude session in here gets the supervisor's MCP server
+    # (supervisor_exec and friends), registered in each user's ~/.claude.json.
+    # The command is the current system's binary, so new sessions pick up
+    # updates. Written in place (not replaced) so the file keeps its mode, and
+    # only when it differs, since running sessions write the file too.
+    systemd.services = { sshd.unitConfig.RequiresMountsFor = [ "/etc/ssh/from-host" ]; } // builtins.listToAttrs (map (user: {
+      name = "claude-mcp-${user}";
+      value = {
+        description = "Register the supervisor's MCP server for ${user}'s Claude";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "home.mount" ];
+        path = [ pkgs.jq pkgs.coreutils ];
+        serviceConfig = { Type = "oneshot"; RemainAfterExit = true; User = user; };
+        script = ''
+          f=/home/${user}/.claude.json
+          [ -s "$f" ] || echo '{}' > "$f"
+          want='{"type":"stdio","command":"/run/current-system/sw/bin/supervisor","args":["mcp"],"env":{}}'
+          if ! jq -e --argjson w "$want" '.mcpServers.supervisor == $w' "$f" >/dev/null; then
+            new=$(jq --argjson w "$want" '.mcpServers.supervisor = $w' "$f")
+            printf '%s\n' "$new" > "$f"
+          fi
+        '';
+      };
+    }) [ "eldar" "ben" ]);
   };
   };
 }

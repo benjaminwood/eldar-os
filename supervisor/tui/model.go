@@ -120,7 +120,7 @@ func Run(client *api.Client) error {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(waitEvent(m.events), tick(), tea.SetWindowTitle("eldar-proxy"))
+	return tea.Batch(waitEvent(m.events), tick(), tea.SetWindowTitle("supervisor"))
 }
 
 func waitEvent(ch <-chan api.Event) tea.Cmd {
@@ -272,9 +272,9 @@ func (m *model) applyState(st api.State) tea.Cmd {
 			m.flash(fmt.Sprintf("● New approval #%d — press 1", fresh[len(fresh)-1]), t.Orange)
 		}
 	}
-	title := "eldar-proxy"
+	title := "supervisor"
 	if n := len(st.Pending); n > 0 {
-		title = fmt.Sprintf("(%d) eldar-proxy", n)
+		title = fmt.Sprintf("(%d) supervisor", n)
 	}
 	cmds = append(cmds, tea.SetWindowTitle(title))
 	if m.tab == tabActivity {

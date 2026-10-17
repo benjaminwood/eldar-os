@@ -1,4 +1,4 @@
-// Package api is the typed client for the credential proxy's admin API.
+// Package api is the typed client for the supervisor's admin API.
 //
 // The admin API is the single interface layer for managing the proxy: the TUI
 // uses this package directly, and the web UI's server relays through it. See

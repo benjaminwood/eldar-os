@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -26,19 +25,13 @@ type Client struct {
 }
 
 // SocketCandidates lists where the admin socket lives, most specific first:
-// $SUPERVISOR_SOCKET (or the older $ELDAR_PROXY_SOCKET), the supervisor on
-// this host, then the older Docker setup's locations.
+// $SUPERVISOR_SOCKET, then the supervisor on this host.
 func SocketCandidates() []string {
 	var out []string
-	for _, k := range []string{"SUPERVISOR_SOCKET", "ELDAR_PROXY_SOCKET"} {
-		if s := os.Getenv(k); s != "" {
-			out = append(out, s)
-		}
+	if s := os.Getenv("SUPERVISOR_SOCKET"); s != "" {
+		out = append(out, s)
 	}
-	out = append(out, "/run/supervisor/admin.sock", "/run/proxy/admin.sock")
-	if home, err := os.UserHomeDir(); err == nil {
-		out = append(out, filepath.Join(home, ".eldar-proxy", "admin.sock"))
-	}
+	out = append(out, "/run/supervisor/admin.sock")
 	return out
 }
 

@@ -26,7 +26,7 @@ Checked items are done; the order of sections is roughly the order of work.
 
 - [ ] Signed commits required on staging `main` (GitHub ruleset), so only
       Ben's merges and the admin's signed pushes land there
-- [ ] Supervisor MCP server (`supervisor_exec` and friends) in Eldar's VM, ported
+- [x] Supervisor MCP server (`supervisor_exec` and friends) in Eldar's VM, ported
       from the old client and renamed to supervisor throughout
 - [ ] A GitHub credential for Eldar, limited to opening PRs on the staging
       repo, held by the supervisor
@@ -37,6 +37,7 @@ Checked items are done; the order of sections is roughly the order of work.
 - [ ] Persona (`CLAUDE.md`), skills, projects, helper scripts
 - [ ] Cron jobs (`jobs.json`) under supercronic, or systemd timers
 - [ ] Remaining MCP servers (notify, system-cron, …)
+- [ ] Move workspace code off the old names (`PROXY_URL` in the chat channel)
 
 ## 3. The rest of the supervisor
 
