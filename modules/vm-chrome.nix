@@ -43,6 +43,12 @@ let
     fi
   '';
 
+  # Chrome policy: extensions installed from the Web Store and kept installed
+  # (agents driving the browser can't remove or disable them).
+  policy = pkgs.writeText "eldar-chrome-policy.json" (builtins.toJSON {
+    ExtensionInstallForcelist = map (id: "${id};https://clients2.google.com/service/update2/crx") cfg.extensions;
+  });
+
   # Chrome leaves Singleton* locks behind after a hard stop, which block the
   # next start.
   clearLocks = pkgs.writeText "chrome-clear-locks" ''
@@ -62,6 +68,11 @@ in
       description = "LinuxServer chrome image, pinned by digest.";
     };
     timeZone = lib.mkOption { type = lib.types.str; default = "America/Los_Angeles"; };
+    extensions = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Chrome Web Store extension ids to force-install.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -84,6 +95,7 @@ in
             -v ${cdpProxy}:/etc/nginx/conf.d/cdp.conf:ro \
             -v ${autostart}:/config/.config/openbox/autostart:ro \
             -v ${clearLocks}:/custom-cont-init.d/01-clear-chrome-locks:ro \
+            -v ${policy}:/etc/opt/chrome/policies/managed/eldar-os.json:ro \
             -e PUID=1000 -e PGID=1000 -e TZ=${cfg.timeZone} \
             -e PIXELFLUX_WAYLAND=false \
             -e SELKIES_USE_CSS_SCALING=true -e SELKIES_FRAMERATE=8-30 \
