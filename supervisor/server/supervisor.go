@@ -44,6 +44,7 @@ type Config struct {
 	ChatWorkspace, ChatTab string // where Eldar, the chief-of-staff session, lives in herdr
 	ChatPath, ChatStatePath string
 	TerminalSSH  TerminalSSH // live terminals into the VM
+	GitHub       *GitHubApp  // Eldar's GitHub App; nil = none
 }
 
 // Supervisor holds all state and serves both APIs.

@@ -36,7 +36,7 @@ echo "publishing $count commit(s):"
 git log --oneline "$range"
 
 echo; echo "scanning with gitleaks…"
-docker run --rm -v "$PWD:/repo" -w /repo "$GITLEAKS" \
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS" \
   git --no-banner --redact --log-opts="$range" /repo
 
 git push public "$target:refs/heads/main"

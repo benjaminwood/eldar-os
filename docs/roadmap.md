@@ -28,10 +28,10 @@ Checked items are done; the order of sections is roughly the order of work.
       apply, first-parent (Ben's merges and the admin's pushes), not just the tip
 - [x] Supervisor MCP server (`supervisor_exec` and friends) in Eldar's VM, ported
       from the old client and renamed to supervisor throughout
-- [ ] A GitHub credential for Eldar, limited to opening PRs on the staging
-      repo, held by the supervisor
-- [ ] Keep Eldar from pushing to `main` at all (a ruleset or a token without
-      that right); today an unsigned push there only stalls applies until reverted
+- [x] Ruleset on `main`: only admins update it; rebase-merge off (0011)
+- [x] Supervisor hands out GitHub App tokens; git and gh in the VM use them
+- [ ] Create the GitHub App, install it on the staging repo, key into the
+      supervisor (sops) and the Eldar-OS vault
 - [ ] Eldar's first PR, merged by Ben on GitHub, applied by the machine
 
 ## 2. Eldar's identity and tools: the workspace

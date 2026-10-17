@@ -29,7 +29,9 @@ and on demand (`scripts/apply`, allowed to `ben` via polkit). It:
 ## Consequences
 
 Approving is merging. An agent can push branches and open PRs, but without an
-allowed signing key its commits never apply on their own. The admin loop is
+allowed signing key its commits never apply on their own. Web-flow signs
+anything made through GitHub, so it means "came through GitHub", not "Ben
+approved": who may change `main` there is limited by a ruleset (0011). The admin loop is
 quick: `scripts/check` builds in the VM before pushing, `scripts/apply` pushes
 and streams the result. A change that breaks only after a reboot (kernel,
 initrd) isn't caught by health checks; the boot menu still has the previous

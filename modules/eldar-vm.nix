@@ -286,6 +286,13 @@ in
     # (strict reverse-path filter, input rules) breaks Docker's TCP egress.
     networking.firewall.enable = false;
     environment.systemPackages = (with pkgs; [ git curl jq ]) ++ [ supervisor ];
+    # git reaches GitHub as Eldar's GitHub App: a token from the supervisor
+    # (branches and PRs on the staging repo; only Ben merges). gh takes one
+    # with GH_TOKEN=$(supervisor github-token).
+    programs.git = {
+      enable = true;
+      config.credential."https://github.com".helper = "/run/current-system/sw/bin/supervisor git-credential";
+    };
     # Every Claude session in here gets the supervisor's MCP server
     # (supervisor_exec and friends), registered in each user's ~/.claude.json.
     # The command is the current system's binary, so new sessions pick up

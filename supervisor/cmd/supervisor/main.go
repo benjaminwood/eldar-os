@@ -4,6 +4,8 @@
 //	supervisor         Ben's TUI: approvals, sessions, grants, the global mode
 //	supervisor web     the web UI (on the tailnet, with mobile push)
 //	supervisor mcp     the MCP server agents in Eldar's VM use to reach it (stdio)
+//	supervisor git-credential, supervisor github-token
+//	                   GitHub as Eldar's App, for git and gh in the VM
 //
 // The UIs talk to the admin socket, which only the supervisor-admin group can
 // open; the agent isn't in it.
@@ -33,6 +35,14 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
 		runServe(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "git-credential" {
+		runGitCredential(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "github-token" {
+		runGitHubToken()
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {

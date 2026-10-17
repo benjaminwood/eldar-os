@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,10 @@ import (
 //	SUPERVISOR_AGENT_USER       the unprivileged agent user (default eldar)
 //	SUPERVISOR_SSH_KEY          key for the VM
 //	SUPERVISOR_KNOWN_HOSTS      the VM's pinned host key
+//	SUPERVISOR_DEFAULT_PROFILE  the profile agents use unless told otherwise
+//	SUPERVISOR_GITHUB_APP_ID, SUPERVISOR_GITHUB_INSTALLATION_ID,
+//	SUPERVISOR_GITHUB_APP_KEY (key file), SUPERVISOR_GITHUB_REPOS (comma-separated names)
+//	                            Eldar's GitHub App (see server.GitHubApp)
 //	APPROVAL_TIMEOUT_MS, COMMAND_TIMEOUT_S, MAX_COMMAND_TIMEOUT_S,
 //	MAX_OUTPUT_BYTES, OP_PATH, OP_TIMEOUT_MS
 //	OP_ACCOUNT_*_TOKEN, OP_PROFILE_*_ACCOUNT, OP_PROFILE_*_ENV  (see server.Profiles)
@@ -62,6 +67,12 @@ func runServe(args []string) {
 		KeyPath:     env("SUPERVISOR_SSH_KEY", state+"/ssh/id_ed25519"),
 		KnownHosts:  env("SUPERVISOR_KNOWN_HOSTS", state+"/ssh/known_hosts"),
 		DefaultUser: env("SUPERVISOR_RUN_USER", "ben"),
+	}
+	cfg.GitHub = &server.GitHubApp{
+		AppID:          os.Getenv("SUPERVISOR_GITHUB_APP_ID"),
+		InstallationID: os.Getenv("SUPERVISOR_GITHUB_INSTALLATION_ID"),
+		KeyPath:        os.Getenv("SUPERVISOR_GITHUB_APP_KEY"),
+		Repos:          strings.Fields(strings.ReplaceAll(os.Getenv("SUPERVISOR_GITHUB_REPOS"), ",", " ")),
 	}
 	cfg.TerminalSSH = server.TerminalSSH{Host: runner.Host, KeyPath: runner.KeyPath, KnownHosts: runner.KnownHosts, User: cfg.AgentUser}
 	profiles := server.LoadProfiles(os.Environ(), cfg.OpBin, cfg.OpTimeout, cfg.CacheDir)

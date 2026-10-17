@@ -48,6 +48,15 @@ and the default one from `/status`, so they stay configuration
 random session key at start, which the supervisor pins to the session ID. A
 session picks the server up when it starts.
 
+## GitHub as Eldar's App
+
+`GET /github/token` (agent API) returns an installation token for Eldar's
+GitHub App, limited to the repos in `SUPERVISOR_GITHUB_REPOS`, made from the
+App's key (`SUPERVISOR_GITHUB_APP_KEY`) and cached until ten minutes before
+it expires. No approval; each new token is audited. In the VM, git uses it
+through `supervisor git-credential` (system git config) and gh through
+`GH_TOKEN=$(supervisor github-token)`. Why: `docs/decisions/0011-eldar-github-app.md`.
+
 ## herdr and live terminals
 
 herdr runs in Eldar's VM as `eldar` (a user service, with a `primary`
