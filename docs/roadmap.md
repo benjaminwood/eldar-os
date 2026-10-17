@@ -77,7 +77,9 @@ jobs. Done last.
       reaches only the Mac's SSH; Eldar's VM stays off the tailnet
 - [ ] Tailscale for Eldar's VM, if it needs its own identity
 - [ ] `*.test` dev domains (dev-dns)
-- [ ] Chrome for Playwright (headful, viewable)
+- [x] Chrome for Playwright: in Eldar's VM (rootless Docker), `playwright` MCP
+      in every session
+- [ ] Ben watches that Chrome from his tailnet
 - [ ] Kubernetes lab VM (kube-vm)
 
 ## 5. Cutover

@@ -6,6 +6,11 @@
   # At cutover to bare metal (Ryzen 9 3900X: 24 threads, 64 GB): vcpu = 24,
   # memMiB = 57344 (all but ~8 GB for the host, supervisor and desktop).
   eldar-os.eldarVm.vcpu = 6;
+  # Playwright on the VM's own Chrome (modules/vm-chrome.nix), for every session.
+  eldar-os.eldarVm.mcpServers.playwright = {
+    command = "/run/current-system/sw/bin/npx";
+    args = [ "-y" "@playwright/mcp@0.0.83" "--cdp-endpoint" "http://127.0.0.1:19222" "--viewport-size" "1280,800" ];
+  };
   eldar-os.eldarVm.memMiB = 6144;
 
   eldar-os.eldarVm.config = { pkgs, lib, ... }:
@@ -20,7 +25,14 @@
       });
     });
   in {
-    imports = [ ../../modules/chezmoi.nix ];
+    imports = [ ../../modules/chezmoi.nix ../../modules/vm-chrome.nix ];
+
+    # Chrome agents drive freely (Playwright over CDP); Ben watches its stream.
+    eldar-os.vmChrome = {
+      enable = true;
+      # Chrome 155.0.8059.84 (ls132)
+      image = "lscr.io/linuxserver/chrome@sha256:0bd253fcf2bc409f7614a5ecd1237ebc90d04002ceb9fc1b5431a911089deab9";
+    };
 
     # herdr, Eldar's terminal workspace manager: the server runs as eldar
     # (lingering, so with no one logged in), and there's always a "primary"
