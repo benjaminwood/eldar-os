@@ -11,8 +11,9 @@ applied. And a bad change mustn't lock anyone out.
 
 ## Decision
 
-A root service, `eldar-os-apply` (`modules/apply/`), runs on a 2-minute timer
-and on demand (`scripts/apply`, allowed to `ben` via polkit). It:
+A root service, `eldar-os-apply` (`modules/apply/`), runs when GitHub reports a
+push (webhook, 0012), on a 2-minute timer as a fallback, and on demand
+(`scripts/apply`, allowed to `ben` via polkit). It:
 
 1. fetches staging `main` and the secrets repo with read-only deploy keys;
 2. **refuses it unless every commit `main` gained since the last apply is
