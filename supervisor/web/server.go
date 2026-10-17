@@ -294,7 +294,7 @@ func (s *server) securityHeaders(next http.Handler) http.Handler {
 		if s.stream != "" {
 			frames = "frame-src " + s.stream + "; " // only the stream, in its own origin
 		}
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' wss://"+r.Host+"; "+frames+"frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' wss://"+r.Host+"; "+frames+"frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Content-Type-Options", "nosniff")

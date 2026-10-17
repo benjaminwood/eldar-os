@@ -78,6 +78,10 @@ function openTerminal(paneId, label) {
 
 // ── terminal view ──────────────────────────────────────────────────────
 let libs = null;
+// The full JetBrains Mono (static/vendor, @font-face in app.css): the Google
+// Fonts copy the rest of the UI uses has no box drawing, so TUI borders fell
+// back to a narrower font and broke their lines.
+const TERM_FONT = "'JetBrains Mono Term'";
 function loadLibs() {
   if (libs) return libs;
   const add = (tag, attrs) => new Promise((ok, fail) => {
@@ -89,6 +93,8 @@ function loadLibs() {
   libs = Promise.all([
     add("link", { rel: "stylesheet", href: "/static/vendor/xterm.css" }),
     add("script", { src: "/static/vendor/xterm.js" }),
+    // xterm.js measures its cell once, at open: the font must be in by then.
+    document.fonts.load(`13px ${TERM_FONT}`), document.fonts.load(`bold 13px ${TERM_FONT}`),
   ]).then(() => Promise.all([
     add("script", { src: "/static/vendor/addon-fit.js" }),
     add("script", { src: "/static/vendor/addon-web-links.js" }),
@@ -151,7 +157,7 @@ async function connectTerminal() {
   let fontSize = 13;
   try { fontSize = Number(localStorage.getItem("termFont")) || 13; } catch {}
   const term = new window.Terminal({
-    fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
+    fontFamily: `${TERM_FONT}, 'JetBrains Mono', ui-monospace, Menlo, monospace`,
     fontSize,
     cursorBlink: true,
     allowProposedApi: true,
@@ -385,7 +391,11 @@ async function connectTerminal() {
   const ws = new WebSocket(`${proto}://${location.host}/api/terminal?${qs}`);
   ws.binaryType = "arraybuffer";
   V.ws = ws;
-  ws.onopen = () => { root.classList.add("live"); term.focus(); };
+  ws.onopen = () => {
+    root.classList.add("live"); term.focus();
+    // A fit while connecting wasn't sent (onResize needs an open socket).
+    ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+  };
   renderTray();
   ws.onmessage = (e) => term.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data));
   ws.onclose = () => {

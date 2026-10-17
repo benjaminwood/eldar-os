@@ -1,5 +1,9 @@
-/* eldar-proxy web UI — Tokyo Night. Theme variables come from view.Theme via
+/* The supervisor's web UI — Tokyo Night. Theme variables come from view.Theme via
    the inline :root block in index.html, so the TUI and web share one palette. */
+
+/* The terminal's font (term.js): the full JetBrains Mono, box drawing included. */
+@font-face { font-family: "JetBrains Mono Term"; font-weight: 400; font-display: block; src: url(/static/vendor/JetBrainsMono-Regular.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono Term"; font-weight: 700; font-display: block; src: url(/static/vendor/JetBrainsMono-Bold.woff2) format("woff2"); }
 
 *, *::before, *::after { box-sizing: border-box; }
 :root {
