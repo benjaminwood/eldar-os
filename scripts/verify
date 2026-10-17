@@ -16,12 +16,11 @@ ok() { echo "ok: $*"; }
 state=$(systemctl is-system-running --wait || true)
 [ "$state" = running ] || { systemctl --failed --no-pager; fail "system is $state"; }; ok "system running"
 
-for m in /:@root /home:@home /nix:@nix /var/log:@log /.snapshots:@snapshots; do
-  src=$(findmnt -no SOURCE "${m%%:*}")
-  [ "$src" = "/dev/mapper/cryptroot[/${m#*:}]" ] || fail "${m%%:*} is mounted from $src"
-done; ok "btrfs subvolumes on LUKS"
+[ "$(findmnt -no SOURCE /)" = /dev/mapper/cryptroot ] || fail "/ is not on LUKS ($(findmnt -no SOURCE /))"
+[ "$(findmnt -no FSTYPE /)" = xfs ] || fail "/ is not XFS"; ok "XFS on LUKS"
 
-findmnt -no OPTIONS / | grep -q compress=zstd || fail "no zstd compression on /"; ok compression
+f=$(mktemp -p /var/tmp); echo reflink > "$f"
+cp --reflink=always "$f" "$f.copy" 2>/dev/null || { rm -f "$f"*; fail "no reflink support"; }; rm -f "$f"*; ok reflinks
 
 [ "$(findmnt -no FSTYPE /boot)" = vfat ] || fail "/boot is not the ESP"
 sudo test -f /boot/EFI/BOOT/BOOTX64.EFI || fail "no fallback bootloader"; ok "fallback bootloader"

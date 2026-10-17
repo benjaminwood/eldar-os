@@ -1,6 +1,6 @@
 # Disk layout for the Samsung 970 EVO 500GB (serial S5H7NC0MB49704F).
 #
-# GPT: 1G ESP + LUKS2 → btrfs with subvolumes.
+# GPT: 1G ESP + LUKS2 → XFS.
 #
 # `device` is only read when formatting, which happens from the installer VM,
 # where scripts/vm attaches this disk as virtio with serial "eldar-os-root".
@@ -41,17 +41,12 @@
               keyFileTimeout = 5;
             };
             content = {
-              type = "btrfs";
-              extraArgs = [ "-f" "-L" "eldar-os" ];
-              subvolumes =
-                let opts = [ "compress=zstd" "noatime" ];
-                in {
-                  "@root" = { mountpoint = "/"; mountOptions = opts; };
-                  "@home" = { mountpoint = "/home"; mountOptions = opts; };
-                  "@nix" = { mountpoint = "/nix"; mountOptions = opts; };
-                  "@log" = { mountpoint = "/var/log"; mountOptions = opts; };
-                  "@snapshots" = { mountpoint = "/.snapshots"; mountOptions = opts; };
-                };
+              # XFS, not btrfs: docs/decisions/0007-xfs.md
+              type = "filesystem";
+              format = "xfs";
+              extraArgs = [ "-f" "-L" "eldar-os" ]; # reflinks are on by default
+              mountpoint = "/";
+              mountOptions = [ "noatime" ];
             };
           };
         };

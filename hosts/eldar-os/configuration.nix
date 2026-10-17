@@ -71,7 +71,7 @@
     }];
   }];
 
-  environment.systemPackages = with pkgs; [ git vim curl rsync btrfs-progs cryptsetup ];
+  environment.systemPackages = with pkgs; [ git vim curl rsync xfsprogs cryptsetup ];
 
   zramSwap.enable = true;
   services.fstrim.enable = true;

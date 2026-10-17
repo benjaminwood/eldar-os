@@ -119,7 +119,7 @@ scripts/verify
 ```
 
 `verify` checks the hostname, that the system is running with no failed units,
-the btrfs subvolumes on LUKS, compression, the fallback bootloader, and that
+XFS on LUKS with reflinks, the fallback bootloader, secrets decrypting, and that
 LUKS was unlocked by the key disk.
 
 ## 7. Ben's LUKS passphrase (Ben, interactively)

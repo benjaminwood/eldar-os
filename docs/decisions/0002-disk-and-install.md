@@ -1,6 +1,6 @@
 # 0002. Own disk, built from a VM: disko, LUKS, btrfs
 
-Accepted, 2026-10-16
+Accepted, 2026-10-16. The filesystem choice (btrfs) is superseded by 0007.
 
 ## Context
 
