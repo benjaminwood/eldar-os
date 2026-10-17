@@ -205,6 +205,11 @@ in
       "d /home/eldar 0750 eldar eldar-ws -"
       "d /home/ben 0700 ben users -"
     ];
+    # The supervisor, as agents in here reach it (PROXY_URL for older clients).
+    environment.variables = {
+      SUPERVISOR_URL = "http://${hostAddr}:${toString supervisorPort}";
+      PROXY_URL = "http://${hostAddr}:${toString supervisorPort}";
+    };
     # Shared workspace: new files group-writable, so ben can edit them.
     environment.extraInit = "umask 002";
     # Docker runs as eldar (a container that mounts / gets eldar's files, not root).

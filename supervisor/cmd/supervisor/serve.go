@@ -51,6 +51,10 @@ func runServe(args []string) {
 		OpTimeout:             ms("OP_TIMEOUT_MS", 15_000),
 		AgentUser:             env("SUPERVISOR_AGENT_USER", "eldar"),
 		HerdrSession:          env("HERDR_SESSION", "default"),
+		ChatWorkspace:         env("CHAT_WORKSPACE", "primary"),
+		ChatTab:               env("CHAT_TAB", "Eldar"),
+		ChatPath:              state + "/chat.jsonl",
+		ChatStatePath:         state + "/chat-state.json",
 	}
 	runner := &server.SSHRunner{
 		Host:        env("SUPERVISOR_AGENT_HOST", "10.42.0.2"),

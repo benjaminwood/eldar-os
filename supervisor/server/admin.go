@@ -24,6 +24,8 @@ func (s *Supervisor) Snapshot() api.State {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	herdr := s.herdr.View(ctx, "", 3*time.Second)
+	chat := s.chat.Summary()
+	chat.Connected, chat.Eldar = s.chatStatus(ctx)
 	return api.State{
 		Now: time.Now().UnixMilli(), Mode: mode, ModeExpiresAt: exp,
 		Pending:       s.approvals.List(),
@@ -35,6 +37,7 @@ func (s *Supervisor) Snapshot() api.State {
 		AwsProfiles:   []string{},
 		ArcProfiles:   []api.ArcProfile{},
 		Settings:      s.settings.Get(),
+		Chat:          chat,
 		MCP:           api.MCPSummary{Servers: []api.MCPServer{}, Pending: []api.MCPSignIn{}},
 		Herdr:         herdr,
 		Mac:           api.MacStatus{Allow: []string{}},
@@ -113,8 +116,7 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 }
 
 var notYet = map[string]string{
-	"/admin/mac": "Mac access", "/admin/mcp": "MCP sign-ins",
-	"/admin/chat": "chat", "/admin/browser-grants": "Arc",
+	"/admin/mac": "Mac access", "/admin/mcp": "MCP sign-ins", "/admin/browser-grants": "Arc",
 }
 
 func (s *Supervisor) adminHandler() http.Handler {
@@ -448,6 +450,45 @@ func (s *Supervisor) adminHandler() http.Handler {
 		sendJSON(w, 200, out)
 	})
 	mux.HandleFunc("GET /admin/terminal", s.handleTerminal)
+
+	// Chat with Eldar.
+	mux.HandleFunc("GET /admin/chat", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		if limit <= 0 {
+			limit = 100
+		}
+		limit = min(limit, 500)
+		before, _ := strconv.Atoi(q.Get("before"))
+		after, _ := strconv.Atoi(q.Get("after"))
+		msgs := s.chat.List(after, limit)
+		if before > 0 {
+			msgs = s.chat.Before(before, limit)
+		}
+		connected, eldar := s.chatStatus(r.Context())
+		sendJSON(w, 200, map[string]any{"messages": msgs, "readUpTo": s.chat.ReadUpTo(), "connected": connected, "eldar": eldar})
+	})
+	mux.HandleFunc("POST /admin/chat", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Text string `json:"text"`
+		}
+		readJSON(r, &b)
+		m, err := s.chat.Add("ben", b.Text, "")
+		if err != nil {
+			sendJSON(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		connected, _ := s.chatStatus(r.Context())
+		sendJSON(w, 200, map[string]any{"message": m, "connected": connected})
+	})
+	mux.HandleFunc("POST /admin/chat/read", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			UpTo float64 `json:"upTo"`
+		}
+		readJSON(r, &b)
+		s.chat.MarkRead(int(b.UpTo))
+		sendJSON(w, 200, map[string]any{"readUpTo": s.chat.ReadUpTo()})
+	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		paths := make([]string, 0, len(notYet))

@@ -35,6 +35,92 @@
       };
     };
 
+    # Eldar, the chief-of-staff Claude session: kept running in herdr
+    # workspace "primary", tab "Eldar", named "Eldar", with the chat channel
+    # (agent-relay/chat-channel.ts in the workspace) so Ben can talk to it from
+    # the supervisor's web UI. Every 30 s: make sure the workspace and tab
+    # exist and Claude runs in the tab; if it's been gone for two checks,
+    # resume the newest session named Eldar (or start one). `herdr agent
+    # start` only acts on a pane at a bare shell prompt, so it never types
+    # into anything else.
+    systemd.user.services.eldar-primary = {
+      description = "Keep Eldar (the chief-of-staff session) running";
+      wantedBy = [ "default.target" ];
+      after = [ "herdr.service" ];
+      wants = [ "herdr.service" ];
+      unitConfig.ConditionUser = "eldar";
+      path = [ herdr pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.findutils pkgs.bash pkgs.zsh pkgs.bun ];
+      environment.PROXY_URL = "http://10.42.0.1:9100";
+      serviceConfig = {
+        # Claude's one-time prompts would block an unattended start: the
+        # bypass-permissions confirmation (where Enter means "No, exit") and
+        # trusting ~/workspace. Accept them once, merging into existing files.
+        ExecStartPre = pkgs.writeShellScript "eldar-primary-prepare" ''
+          set -e
+          mkdir -p ~/.claude
+          f=~/.claude/settings.json; [ -s "$f" ] || echo '{}' > "$f"
+          jq '.skipDangerousModePermissionPrompt = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          f=~/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
+          jq '.projects["/home/eldar/workspace"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+        '';
+        ExecStart = pkgs.writeShellScript "eldar-primary" ''
+          WORKSPACE=primary TAB=Eldar NAME=Eldar CWD=/home/eldar/workspace
+          TRANSCRIPTS=$HOME/.claude/projects/-home-eldar-workspace
+          RELAY=$CWD/projects/agent-relay
+          CLAUDE_ARGS=(--dangerously-skip-permissions
+            --dangerously-load-development-channels server:chat
+            --mcp-config "$RELAY/chat.mcp.json")
+          log() { echo "eldar-primary: $*"; }
+          h() { herdr "$@" 2>/dev/null; }
+          # Newest transcript whose latest name is $NAME; prints its session ID.
+          eldar_session() {
+            local f
+            for f in $(grep -l "\"customTitle\":\"$NAME\"" "$TRANSCRIPTS"/*.jsonl 2>/dev/null | xargs -r ls -t); do
+              if [[ $(grep -o '"customTitle":"[^"]*"' "$f" | tail -1) == "\"customTitle\":\"$NAME\"" ]]; then
+                basename "$f" .jsonl; return
+              fi
+            done
+          }
+          misses=0
+          while true; do
+            sleep 30
+            ws=$(h workspace list | jq -r --arg l "$WORKSPACE" '[.result.workspaces[] | select(.label == $l)][0].workspace_id // empty')
+            if [[ -z $ws ]]; then
+              log "no '$WORKSPACE' workspace; creating it"
+              h workspace create --label "$WORKSPACE" --cwd "$CWD" --no-focus >/dev/null; continue
+            fi
+            tab=$(h tab list --workspace "$ws" | jq -r --arg l "$TAB" '[.result.tabs[] | select(.label == $l)][0].tab_id // empty')
+            if [[ -z $tab ]]; then
+              log "no '$TAB' tab in $WORKSPACE; creating it"
+              h tab create --workspace "$ws" --cwd "$CWD" --label "$TAB" --no-focus >/dev/null; continue
+            fi
+            pane=$(h pane list --workspace "$ws" | jq -c --arg t "$tab" '[.result.panes[] | select(.tab_id == $t)][0] // empty')
+            [[ -z $pane ]] && continue
+            if [[ $(jq -r '.agent // empty' <<<"$pane") == claude ]]; then misses=0; continue; fi
+            misses=$((misses + 1)); ((misses < 2)) && continue
+            pane_id=$(jq -r '.pane_id' <<<"$pane")
+            id=$(eldar_session)
+            if [[ -n $id ]]; then
+              log "Claude isn't running in $pane_id; resuming $NAME ($id)"; args=("''${CLAUDE_ARGS[@]}" --resume "$id")
+            else
+              log "Claude isn't running in $pane_id and no session is named $NAME; starting one"; args=("''${CLAUDE_ARGS[@]}" -n "$NAME")
+            fi
+            out=$(herdr agent start eldar --kind claude --pane "$pane_id" --timeout 90000 -- "''${args[@]}" 2>&1); rc=$?
+            if [[ $(h pane list --workspace "$ws" | jq -r --arg p "$pane_id" '.result.panes[] | select(.pane_id == $p) | .agent // empty') == claude ]]; then
+              # The development-channels warning waits for Enter (option 1
+              # confirms); Enter at an idle, empty prompt does nothing.
+              for _ in 1 2 3 4 5; do sleep 3; h pane send-keys "$pane_id" enter >/dev/null; done
+              misses=0
+            else
+              log "agent start failed (rc $rc): $(head -c 300 <<<"$out")"
+            fi
+          done
+        '';
+        Restart = "always";
+        RestartSec = 10;
+      };
+    };
+
     # Ben works in here as eldar, so his dotfiles apply to both users.
     eldar-os.chezmoi.users = {
       eldar.source = dotfiles;

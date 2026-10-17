@@ -145,6 +145,7 @@ func (s *Supervisor) agentHandler() http.Handler {
 		}
 		sendJSON(w, 200, map[string]any{"count": len(entries), "limit": limit, "entries": entries})
 	})
+	s.chatRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, 404, map[string]any{"error": "Not found"})
 	})

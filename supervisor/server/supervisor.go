@@ -40,6 +40,8 @@ type Config struct {
 	AgentUser string // the unprivileged agent user (cron checks, herdr)
 
 	HerdrSession string      // herdr session the UIs show by default
+	ChatWorkspace, ChatTab string // where Eldar, the chief-of-staff session, lives in herdr
+	ChatPath, ChatStatePath string
 	TerminalSSH  TerminalSSH // live terminals into the VM
 }
 
@@ -57,6 +59,8 @@ type Supervisor struct {
 	crons     *Crons
 	profiles  *Profiles
 	herdr     *Herdr
+	chat      *Chat
+	chatPins  KeyPins
 	termSSH   TerminalSSH
 	runner    interface {
 		Runner
@@ -93,6 +97,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		profiles:       profiles,
 		herdr:          NewHerdr(runner, cfg.AgentUser, cfg.HerdrSession, n),
 		termSSH:        cfg.TerminalSSH,
+		chat:           NewChat(cfg.ChatPath, cfg.ChatStatePath, n),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil
