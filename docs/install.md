@@ -194,19 +194,29 @@ Then:
 
 ## 10. Tailnet nodes
 
-The supervisor's web UI and the apply webhook receiver each join the tailnet
-as their own node. In the tailnet policy (download it first; change only
-these entries): owners for `tag:eldar-proxy` and `tag:eldar-os-hook`, and the
-`funnel` node attribute for `tag:eldar-os-hook` (public HTTPS, no ACL rules,
-so no tailnet access). Then give each a single-use auth key for its tag,
-written as the service's user:
+The host, the supervisor's web UI and the apply webhook receiver each join
+the tailnet as their own node. In the tailnet policy (download it first;
+change only these entries):
+
+- owners for `tag:eldar-os`, `tag:eldar-proxy` and `tag:eldar-os-hook`;
+- a `hosts` alias for Ben's Mac, and two rules: the Mac → `tag:eldar-os:22`
+  (Ben SSHes in) and `tag:eldar-os` → the Mac's port 22 (the supervisor's Mac
+  commands), both TCP only;
+- the `funnel` node attribute for `tag:eldar-os-hook` (public HTTPS; no ACL
+  rules, so no tailnet access);
+- `tests` that pin these paths, so a later edit can't quietly widen them.
+
+Eldar's VM can't use the host's connection: the host firewall rejects VM
+traffic to the tailnet range, and a health check enforces it. Then give each
+node a single-use auth key for its tag:
 
 | Node | Tag | Auth key goes in |
 |---|---|---|
+| host (`tailscaled`) | `tag:eldar-os` | `/var/lib/tailscale/authkey` |
 | web UI (`supervisor-web`) | `tag:eldar-proxy` | `/var/lib/supervisor-web/authkey` |
 | webhooks (`eldar-os-apply-hook`) | `tag:eldar-os-hook` | `/var/lib/eldar-os-hook/authkey` |
 
-Restart the service; it registers and deletes the key.
+Restart the service (for the host, apply); it registers and deletes the key.
 
 ## Changing the system
 

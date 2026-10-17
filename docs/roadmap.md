@@ -68,7 +68,9 @@ jobs. Done last.
 
 ## 4. Networking and services
 
-- [ ] Tailscale for the host and Eldar's VM (own identities, ACLs)
+- [x] Tailscale for the host (`tag:eldar-os`): Ben's Mac SSHes in; the host
+      reaches only the Mac's SSH; Eldar's VM stays off the tailnet
+- [ ] Tailscale for Eldar's VM, if it needs its own identity
 - [ ] `*.test` dev domains (dev-dns)
 - [ ] Chrome for Playwright (headful, viewable)
 - [ ] Kubernetes lab VM (kube-vm)
