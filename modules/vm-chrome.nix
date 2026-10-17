@@ -45,7 +45,7 @@ let
 
   # Chrome leaves Singleton* locks behind after a hard stop, which block the
   # next start.
-  clearLocks = pkgs.writeText "chrome-clear-locks" ''
+  clearLocks = pkgs.writeScript "chrome-clear-locks" ''
     #!/usr/bin/with-contenv bash
     PROFILE_DIR=/config/chrome-profile
     if [ -d "$PROFILE_DIR" ]; then
