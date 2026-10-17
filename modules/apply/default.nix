@@ -59,6 +59,23 @@ in
       default = "10min";
       description = "If the apply hasn't confirmed health by then, the previous system is reactivated.";
     };
+    webhook = {
+      enable = lib.mkEnableOption "applying as soon as GitHub reports a push (docs/decisions/0012-cycle-time.md)";
+      hostname = lib.mkOption {
+        type = lib.types.str;
+        default = "eldar-os-hook";
+        description = "Tailnet machine name; webhooks go to https://<name>.<tailnet>.ts.net/github over Funnel. Its one-time auth key goes in /var/lib/eldar-os-hook/authkey.";
+      };
+      secretFile = lib.mkOption {
+        type = lib.types.str;
+        description = "File holding the webhook secret GitHub signs deliveries with.";
+      };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.callPackage ../../packages/supervisor.nix { };
+        description = "Package providing bin/apply-hook.";
+      };
+    };
   };
 
   config = {
@@ -129,6 +146,50 @@ in
       });
     '';
 
-    users.users = lib.genAttrs cfg.triggerUsers (_: { extraGroups = [ "systemd-journal" ]; });
+    users.users = lib.genAttrs cfg.triggerUsers (_: { extraGroups = [ "systemd-journal" ]; })
+      // lib.optionalAttrs cfg.webhook.enable {
+        eldar-os-hook = { isSystemUser = true; group = "eldar-os-hook"; };
+      };
+    users.groups = lib.mkIf cfg.webhook.enable { eldar-os-hook = { }; };
+    eldar-os.apply.triggerUsers = lib.mkIf cfg.webhook.enable [ "eldar-os-hook" ];
+
+    # GitHub webhooks over Tailscale Funnel; a signed delivery only starts an
+    # apply, which fetches and checks everything itself. The timer stays as
+    # the fallback for a missed delivery.
+    systemd.services.eldar-os-apply-hook = lib.mkIf cfg.webhook.enable {
+      description = "Start an apply when GitHub reports a push";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ];
+      path = [ pkgs.systemd ];
+      environment = {
+        HOOK_HOSTNAME = cfg.webhook.hostname;
+        HOOK_STATE_DIR = "/var/lib/eldar-os-hook";
+        HOOK_SECRET_FILE = cfg.webhook.secretFile;
+        HOME = "/var/lib/eldar-os-hook";
+      };
+      serviceConfig = {
+        ExecStart = "${cfg.webhook.package}/bin/apply-hook";
+        User = "eldar-os-hook";
+        Group = "eldar-os-hook";
+        StateDirectory = "eldar-os-hook";
+        StateDirectoryMode = "0700";
+        Restart = "always";
+        RestartSec = 5;
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        PrivateDevices = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictNamespaces = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        CapabilityBoundingSet = "";
+      };
+    };
   };
 }
