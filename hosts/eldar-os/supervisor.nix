@@ -22,4 +22,11 @@
     owner = "supervisor";
     restartUnits = [ "supervisor.service" ];
   };
+  # Eldar's GitHub App (docs/decisions/0011-eldar-github-app.md); its IDs
+  # are in supervisor-env.
+  sops.secrets.github-app-key = {
+    owner = "supervisor";
+    restartUnits = [ "supervisor.service" ];
+  };
+  systemd.services.supervisor.environment.SUPERVISOR_GITHUB_APP_KEY = config.sops.secrets.github-app-key.path;
 }
