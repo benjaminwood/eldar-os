@@ -36,6 +36,14 @@ Checked items are done; the order of sections is roughly the order of work.
 
 ## 2. Eldar's identity and tools: the workspace
 
+The workspace (`/srv/eldar/workspace`, Eldar's `~/workspace`) is what Eldar
+changes freely: persona, skills, memory, notes, its projects and MCPs, cron
+jobs. Done last.
+
+- [ ] Version control and an off-machine copy: the workspace as its own private
+      repo, and `~/.claude` (sessions, memory, settings) too; options to weigh
+      then (legacy Eldar symlinks files into place)
+
 - [ ] Persona (`CLAUDE.md`), skills, projects, helper scripts
 - [ ] Cron jobs (`jobs.json`) under supercronic, or systemd timers
 - [x] Chat and relay channels, `notify_ben`, `supervisor notify` and

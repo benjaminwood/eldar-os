@@ -13,6 +13,9 @@
 #   scripts/vm log        tail the serial log
 #   scripts/vm authorize  installer only: put our SSH key in via the serial console
 #   scripts/vm ssh [cmd]  ssh in as ben (VM_USER=nixos while in the installer)
+#   scripts/vm eldar [cmd]
+#                         into Eldar's VM (through eldar-os) as eldar, running
+#                         herdr by default: Eldar's sessions, live (ELDAR_USER=ben)
 #
 #   scripts/vm --dry-run <cmd>
 #                         same, against a sparse disk image the size of the
@@ -184,5 +187,10 @@ case "${1:-}" in
   log) exec tail -n 50 -f "$STATE/serial.log" ;;
   ssh) shift; user=ben; [ "${VM_USER:-}" ] && user=$VM_USER
        exec ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$user@127.0.0.1" "$@" ;;
-  *) sed -n '2,24p' "$0"; exit 1 ;;
+  eldar) shift; [ $# -gt 0 ] || set -- herdr
+       # The VM's host key is pinned on first use, in our own known_hosts.
+       exec ssh -t -i "$SSH_KEY" -o ProxyCommand="$0 ${DRY_RUN:+--dry-run }ssh -W %h:%p" \
+         -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$STATE/known_hosts_eldar" -o LogLevel=ERROR \
+         "${ELDAR_USER:-eldar}@10.42.0.2" "$@" ;;
+  *) sed -n '2,27p' "$0"; exit 1 ;;
 esac
