@@ -92,6 +92,7 @@ function loadLibs() {
   ]).then(() => Promise.all([
     add("script", { src: "/static/vendor/addon-fit.js" }),
     add("script", { src: "/static/vendor/addon-web-links.js" }),
+    add("script", { src: "/static/vendor/addon-unicode11.js" }),
   ]));
   return libs;
 }
@@ -167,6 +168,9 @@ async function connectTerminal() {
   const fit = new window.FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new window.WebLinksAddon.WebLinksAddon((e, uri) => window.open(uri, "_blank", "noopener")));
+  // Wide glyphs (emoji, ⚡) are two cells in TUIs; xterm.js defaults to Unicode 6 widths.
+  term.loadAddon(new window.Unicode11Addon.Unicode11Addon());
+  term.unicode.activeVersion = "11";
   term.open(root.querySelector(".term-el"));
 
   V = { root, term, fit, ws: null, paneId, label, closed: false, tray: { idx: 0, hidden: new Set(), open: false, seen: new Set((S.data?.pending || []).map((p) => p.id)) } };

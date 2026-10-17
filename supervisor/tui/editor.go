@@ -118,7 +118,7 @@ type editor struct {
 func newEditor(m *model, session string) *editor {
 	e := &editor{
 		targets: grantTargets(m),
-		durIdx: 1, awsMode: modeNone, durs: durations,
+		durIdx:  1, awsMode: modeNone, durs: durations,
 		creds: newMultiSelect("credentials", listRows), aws: newMultiSelect("AWS roles", listRows),
 		arc: newMultiSelect("browser profiles", listRows), arcNames: map[string]string{},
 	}

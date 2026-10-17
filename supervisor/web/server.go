@@ -63,6 +63,7 @@ type server struct {
 	push   *pusher
 	keys   *passkeys // nil until the tailnet HTTPS name is known
 	stream string    // https://<StreamHost>.<tailnet>, or ""
+	dev    bool      // the loopback development listener: no auth
 	static fs.FS
 }
 
@@ -86,7 +87,13 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.Listen != "" {
 		// Development only: no tailnet identity, so no auth. Bind to loopback.
 		log.Printf("dev listener on http://%s (no auth — loopback only)", cfg.Listen)
-		return http.ListenAndServe(cfg.Listen, srv.routes(false))
+		srv.dev = true
+		hs := &http.Server{Addr: cfg.Listen, Handler: srv.routes(false)}
+		go func() { <-ctx.Done(); hs.Close() }()
+		if err := hs.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
 	}
 
 	ts := &tsnet.Server{

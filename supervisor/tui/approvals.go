@@ -243,7 +243,11 @@ func (m *model) pendingDetail(w, h int) string {
 	}
 	field("Cwd", sDim.Render(strings.Replace(p.Cwd, "/home/eldar/", "~/", 1)))
 	if p.AllowAlways != "" {
-		field("Always", sDim.Render("A adds “"+p.AllowAlways+"” to the "+p.Host+" allow list"))
+		where := "the policy's allow rules"
+		if p.Host != "" {
+			where = "the " + p.Host + " allow list"
+		}
+		field("Always", sDim.Render("A adds “"+p.AllowAlways+"” to "+where))
 	}
 	if p.Channel == "tmux" {
 		field("Also on", sDim.Render("tmux popup in the caller's pane"))

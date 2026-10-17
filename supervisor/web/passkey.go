@@ -201,6 +201,12 @@ func deviceOf(r *http.Request) string {
 // ── handlers ───────────────────────────────────────────────────────────────
 
 func (s *server) passkeyStatus(w http.ResponseWriter, r *http.Request) {
+	if s.dev {
+		// The loopback development listener has no auth at all (Run), so
+		// there's nothing to unlock.
+		writeJSON(w, 200, map[string]any{"available": false, "unlocked": true, "dev": true})
+		return
+	}
 	if s.keys == nil {
 		writeJSON(w, 200, map[string]any{"available": false})
 		return
