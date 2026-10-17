@@ -28,6 +28,8 @@ type Grants struct {
 	n       *Notifier
 }
 
+// Grants are Ben's standing exceptions to per-command approval, narrow by
+// construction and in memory only (docs/decisions/0013-approvals-and-grants.md).
 func NewGrants(n *Notifier) *Grants { return &Grants{grants: map[int]*api.Grant{}, n: n} }
 
 func normCreds(c api.Creds) api.Creds {

@@ -9,7 +9,7 @@ of them, and you step into any of them from your desk or your phone.
 The agents live in a microVM with no credentials of their own. Everything
 they do with a credential goes through the **supervisor** on the host, and by
 default each of those commands waits for a human to approve it, one at a
-time. A time-limited grant to one Claude session is the way to stop being
+time. A grant to one Claude session is the way to stop being
 asked. The whole machine is one flake, and the agents change it the same
 way a person would: they open a pull request, a human merges it, and the
 machine applies the change seconds later.
@@ -48,11 +48,11 @@ are marked where they appear.
   decision goes in an audit log.
 - **Until you grant a session more.** When one Claude session is working
   through something that needs many commands, give it a grant: a scope
-  (which credentials, AWS roles, host or browser profile) for a set time.
-  Inside that scope, that session's commands run without asking (the
-  policy's denies still apply); every other session still asks, and the
-  grant expires on its own. Agents can ask for a
-  grant, and you can narrow it before approving.
+  (which credentials, AWS roles, host or browser profile) for a set time, or
+  until you revoke it. Inside that scope, that session's commands run without
+  asking (the policy's denies still apply); every other session still asks.
+  Agents can ask for a grant, and you can narrow it before approving. Why it
+  works this way: [decision 0013](docs/decisions/0013-approvals-and-grants.md).
 - **Other machines, explicitly.** Agents can run commands on configured hosts
   (a Mac, first), with per-host allow lists and grants, and drive a real
   browser on them through a bridge, one approved 30-minute window at a time.

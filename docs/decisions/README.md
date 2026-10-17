@@ -19,3 +19,6 @@ the old one *Superseded by NNNN*. Don't rewrite history.
 | [0008](0008-eldar-microvm.md) | Eldar's environment is a microVM; the host is the control plane | Accepted |
 | [0009](0009-supervisor.md) | The supervisor: a Go rewrite that runs commands in Eldar's VM | Accepted |
 | [0010](0010-eldar-vm-updates-in-place.md) | Eldar's VM is updated in place, never restarted for software | Accepted |
+| [0011](0011-eldar-github-app.md) | Eldar works on GitHub as its own App; only Ben merges | Accepted |
+| [0012](0012-cycle-time.md) | An agent waits only for Ben's approval | Accepted |
+| [0013](0013-approvals-and-grants.md) | Each credentialed command is approved on its own, until Ben grants more | Accepted |

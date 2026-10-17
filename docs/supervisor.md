@@ -12,7 +12,8 @@ they share). Nix: `modules/supervisor.nix`, configured in
 1. An agent in Eldar's VM POSTs to `http://10.42.0.1:9100/exec` (the only
    host port the VM can reach) with the command, the 1Password profile, the
    credential names it needs, and its session ID and key.
-2. The supervisor decides, in order: authorized cron → lockdown → policy deny
+2. The supervisor decides (why: `docs/decisions/0013-approvals-and-grants.md`),
+   in order: authorized cron → lockdown → policy deny
    → global bypass → policy allow → a grant → ask Ben (TUI, web UI, phone).
 3. If approved, it fetches the named credentials from 1Password (cached per
    profile until cleared) and runs the command in the VM as `ben` over SSH,
