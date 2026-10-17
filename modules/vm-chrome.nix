@@ -43,12 +43,6 @@ let
     fi
   '';
 
-  # Chrome policy: extensions installed from the Web Store and kept installed
-  # (agents driving the browser can't remove or disable them).
-  policy = pkgs.writeText "eldar-chrome-policy.json" (builtins.toJSON {
-    ExtensionInstallForcelist = map (id: "${id};https://clients2.google.com/service/update2/crx") cfg.extensions;
-  });
-
   # Chrome leaves Singleton* locks behind after a hard stop, which block the
   # next start.
   clearLocks = pkgs.writeText "chrome-clear-locks" ''
@@ -68,10 +62,15 @@ in
       description = "LinuxServer chrome image, pinned by digest.";
     };
     timeZone = lib.mkOption { type = lib.types.str; default = "America/Los_Angeles"; };
-    extensions = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      description = "Chrome Web Store extension ids to force-install.";
+    localPolicies = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/eldar/.config/eldar-chrome/policies";
+      description = ''
+        A folder of Chrome policy files (JSON) kept on the machine, outside
+        this repo, mounted as Chrome's managed policies when it exists: e.g.
+        extensions to force-install, which then can't be removed by agents
+        driving the browser.
+      '';
     };
   };
 
@@ -88,14 +87,15 @@ in
       serviceConfig = {
         ExecStartPre = "-${pkgs.docker}/bin/docker rm -f eldar-chrome";
         ExecStart = pkgs.writeShellScript "eldar-chrome" ''
-          exec docker run --rm --name eldar-chrome \
+          policies=()
+          [ -d ${cfg.localPolicies} ] && policies=(-v ${cfg.localPolicies}:/etc/opt/chrome/policies/managed:ro)
+          exec docker run --rm --name eldar-chrome "''${policies[@]}" \
             --shm-size 1g \
             -p 3000:3000 -p 127.0.0.1:19222:19222 \
             -v eldar-chrome-config:/config \
             -v ${cdpProxy}:/etc/nginx/conf.d/cdp.conf:ro \
             -v ${autostart}:/config/.config/openbox/autostart:ro \
             -v ${clearLocks}:/custom-cont-init.d/01-clear-chrome-locks:ro \
-            -v ${policy}:/etc/opt/chrome/policies/managed/eldar-os.json:ro \
             -e PUID=1000 -e PGID=1000 -e TZ=${cfg.timeZone} \
             -e PIXELFLUX_WAYLAND=false \
             -e SELKIES_USE_CSS_SCALING=true -e SELKIES_FRAMERATE=8-30 \
