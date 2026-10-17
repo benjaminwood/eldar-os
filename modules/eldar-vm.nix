@@ -1,4 +1,5 @@
-# SPIKE: Eldar in its own microVM (microvm.nix). See docs/spikes/eldar-vm.md.
+# Eldar's environment: a microVM (microvm.nix). docs/decisions/0008-eldar-microvm.md
+# (how it was worked out: docs/spikes/eldar-vm.md).
 #
 # The host is the control plane (supervisor, secrets, approvals, the apply
 # loop); the VM is where Ben and the AI work. The VM gets its own kernel and
@@ -84,6 +85,9 @@ in
   networking.firewall.trustedInterfaces = [ "vm-eldar" ];
 
   microvm.autostart = [ "eldar" ];
+  # Machines without (nested) KVM, e.g. some CI runners, skip the VM rather
+  # than fail.
+  systemd.services."microvm@eldar".unitConfig.ConditionPathExists = "/dev/kvm";
 
   # --- the VM -----------------------------------------------------------------
 

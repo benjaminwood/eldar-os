@@ -1,7 +1,7 @@
 # Spike: Eldar in its own microVM
 
-Status: spike, for review (branch `spike/eldar-vm`). Decision record:
-`docs/decisions/0008-eldar-microvm.md` (proposed).
+Status: done; adopted as `docs/decisions/0008-eldar-microvm.md`. Kept as the
+record of how the design was tested.
 
 ## What was built
 

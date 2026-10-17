@@ -1,6 +1,6 @@
 # 0008. Eldar's environment is a microVM; the host is the control plane
 
-Proposed, 2026-10-16
+Accepted, 2026-10-16
 
 ## Context
 

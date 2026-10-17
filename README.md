@@ -7,8 +7,8 @@ whole machine.
 - `hosts/eldar-os/` — the machine: disk layout (disko), hardware, configuration,
   where it applies from.
 - `modules/` — `apply/` (the machine applies signed `main` itself),
-  `secrets.nix` (sops-nix) and `chezmoi.nix` (users' dotfiles, from a pinned
-  dotfiles repo).
+  `secrets.nix` (sops-nix), `chezmoi.nix` (users' dotfiles, from a pinned
+  dotfiles repo) and `eldar-vm.nix` (Eldar's environment, a microVM).
 - `trust/` — public keys allowed to sign what gets applied.
 - `scripts/`
   - `host-setup.sh` — one-time root setup of the Ubuntu host that runs the VM
