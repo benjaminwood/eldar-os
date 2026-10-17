@@ -62,6 +62,9 @@
           jq '.skipDangerousModePermissionPrompt = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
           f=~/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
           jq '.projects["/home/eldar/workspace"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          # herdr's Claude hooks: report each session's ID and state to herdr
+          # (the supervisor uses it to know which session is Eldar).
+          herdr integration install claude >/dev/null
         '';
         ExecStart = pkgs.writeShellScript "eldar-primary" ''
           WORKSPACE=primary TAB=Eldar NAME=Eldar CWD=/home/eldar/workspace

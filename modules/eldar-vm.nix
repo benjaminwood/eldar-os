@@ -111,6 +111,11 @@ in
   networking.firewall.trustedInterfaces = [ "vm-eldar" ];
 
   microvm.autostart = [ "eldar" ];
+  # Applying the host never restarts Eldar's VM: Ben and the agents work in
+  # there, and a restart ends every session. A changed VM config takes effect
+  # at the VM's next restart (a host reboot, or `systemctl restart
+  # microvm@eldar` at a chosen moment).
+  microvm.vms.eldar.restartIfChanged = false;
   # Machines without (nested) KVM, e.g. some CI runners, skip the VM rather
   # than fail.
   systemd.services."microvm@eldar".unitConfig.ConditionPathExists = "/dev/kvm";
