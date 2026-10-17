@@ -20,32 +20,34 @@ import (
 
 // settingRow is one selectable line on the Settings tab.
 type settingRow struct {
-	key  string // "p:<name>" sign-in, "s:<name>" server, "c:<id>" cron, "k:<name>" cached creds, "ma:<pattern>" Mac allow, "mg:<id>" Mac grant
+	key  string // "p:<name>" sign-in, "s:<name>" server, "c:<id>" cron, "k:<name>" cached creds, "h:<host>" a remote host, "ha:<host>:<pattern>" its allow list, "hg:<host>:<id>" its grant
 	kind byte
 	id   string
+	host string // remote host rows: which host
 }
 
 func (m *model) settingRows() []settingRow {
 	var rows []settingRow
 	for _, p := range m.st.MCP.Pending {
-		rows = append(rows, settingRow{"p:" + p.Name, 'p', p.Name})
+		rows = append(rows, settingRow{"p:" + p.Name, 'p', p.Name, ""})
 	}
 	for _, e := range m.st.Cache {
-		rows = append(rows, settingRow{"k:" + e.Name, 'k', e.Name})
+		rows = append(rows, settingRow{"k:" + e.Name, 'k', e.Name, ""})
 	}
-	if m.st.Mac.Configured {
-		for _, g := range m.macGrants() {
-			rows = append(rows, settingRow{fmt.Sprintf("mg:%d", g.ID), 'g', fmt.Sprint(g.ID)})
+	for _, h := range m.hosts() {
+		rows = append(rows, settingRow{"h:" + h.Name, 'h', h.Name, h.Name})
+		for _, g := range m.hostGrants(h.Name) {
+			rows = append(rows, settingRow{fmt.Sprintf("hg:%s:%d", h.Name, g.ID), 'g', fmt.Sprint(g.ID), h.Name})
 		}
-		for _, p := range m.st.Mac.Allow {
-			rows = append(rows, settingRow{"ma:" + p, 'a', p})
+		for _, p := range h.Allow {
+			rows = append(rows, settingRow{"ha:" + h.Name + ":" + p, 'a', p, h.Name})
 		}
 	}
 	for _, s := range m.st.MCP.Servers {
-		rows = append(rows, settingRow{"s:" + s.Name, 's', s.Name})
+		rows = append(rows, settingRow{"s:" + s.Name, 's', s.Name, ""})
 	}
 	for _, c := range m.st.Crons {
-		rows = append(rows, settingRow{"c:" + c.ID, 'c', c.ID})
+		rows = append(rows, settingRow{"c:" + c.ID, 'c', c.ID, ""})
 	}
 	return rows
 }
@@ -63,20 +65,52 @@ func (m *model) settingIndex(rows []settingRow) int {
 	return -1
 }
 
-func (m *model) macGrants() []api.Grant {
+// hosts: remote hosts agents may run commands on (Ben's Mac is "mac").
+func (m *model) hosts() []api.HostStatus {
+	var out []api.HostStatus
+	for _, h := range m.st.Hosts {
+		if h.Configured {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func (m *model) hostLabel(name string) string {
+	for _, h := range m.st.Hosts {
+		if h.Name == name {
+			return h.Label
+		}
+	}
+	return name
+}
+
+// selectedHost: the host whose section the cursor is in, else the first.
+func (m *model) selectedHost() string {
+	rows := m.settingRows()
+	if i := m.settingIndex(rows); i >= 0 && rows[i].host != "" {
+		return rows[i].host
+	}
+	if hs := m.hosts(); len(hs) > 0 {
+		return hs[0].Name
+	}
+	return ""
+}
+
+func (m *model) hostGrants(host string) []api.Grant {
 	var out []api.Grant
 	for _, g := range m.st.Grants {
-		if g.Target == "mac" {
+		if g.Target == host {
 			out = append(out, g)
 		}
 	}
 	return out
 }
 
-// macBypass returns the IDs of Mac grants that cover everything.
-func (m *model) macBypass() []int {
+// hostBypass returns the IDs of a host's grants that cover everything.
+func (m *model) hostBypass(host string) []int {
 	var ids []int
-	for _, g := range m.macGrants() {
+	for _, g := range m.hostGrants(host) {
 		if g.Session == "*" && g.Profile == "*" && g.Credentials.Any {
 			ids = append(ids, g.ID)
 		}
@@ -84,15 +118,15 @@ func (m *model) macBypass() []int {
 	return ids
 }
 
-func macBypassPopup() *popup {
+func hostBypassPopup(host, label string) *popup {
 	grant := func(min *int) func(*model) tea.Cmd {
 		return func(m *model) tea.Cmd {
-			return m.addGrant(api.GrantInput{Target: "mac", Session: "*", Profile: "*", Credentials: api.AnyCreds, Minutes: min, Note: "Mac bypass"}, 0)
+			return m.addGrant(api.GrantInput{Target: host, Session: "*", Profile: "*", Credentials: api.AnyCreds, Minutes: min, Note: label + " bypass"}, 0)
 		}
 	}
 	return &popup{
-		title:    "Bypass your Mac",
-		subtitle: "Every Mac command runs without asking (policy denies and lockdown still apply)",
+		title:    "Bypass " + label,
+		subtitle: "Every command there runs without asking (policy denies and lockdown still apply)",
 		opts: []popupOpt{
 			{key: "1", label: "15 minutes", color: t.Lavender, run: grant(intp(15))},
 			{key: "2", label: "1 hour", color: t.Lavender, run: grant(intp(60))},
@@ -137,28 +171,32 @@ func (m *model) settingsKey(k string) tea.Cmd {
 			}
 		}
 	case "t":
-		if !m.st.Mac.Configured {
+		host := m.selectedHost()
+		if host == "" {
 			return nil
 		}
-		m.flash("Testing the Mac connection…", t.Dim)
+		label := m.hostLabel(host)
+		m.flash("Testing the connection to "+label+"…", t.Dim)
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			r, err := client.TestMac(ctx)
+			r, err := client.HostTest(ctx, host)
 			if err != nil {
 				return resultMsg{err: err}
 			}
 			if !r.OK {
-				return resultMsg{err: fmt.Errorf("Mac unreachable: %s", r.Detail)}
+				return resultMsg{err: fmt.Errorf("%s unreachable: %s", label, r.Detail)}
 			}
-			return resultMsg{ok: "✓ Mac reachable — " + r.Detail}
+			return resultMsg{ok: "✓ " + label + " reachable — " + r.Detail}
 		}
 	case "b":
-		if !m.st.Mac.Configured {
+		host := m.selectedHost()
+		if host == "" {
 			return nil
 		}
-		if ids := m.macBypass(); len(ids) > 0 {
-			return m.call("✓ Mac bypass off", func(ctx context.Context) error {
+		label := m.hostLabel(host)
+		if ids := m.hostBypass(host); len(ids) > 0 {
+			return m.call("✓ "+label+" bypass off", func(ctx context.Context) error {
 				for _, id := range ids {
 					if err := client.RevokeGrant(ctx, id); err != nil {
 						return err
@@ -167,19 +205,21 @@ func (m *model) settingsKey(k string) tea.Cmd {
 				return nil
 			})
 		}
-		m.popup = macBypassPopup()
+		m.popup = hostBypassPopup(host, label)
 	case "a":
-		if !m.st.Mac.Configured {
+		host := m.selectedHost()
+		if host == "" {
 			return nil
 		}
-		m.prompt = newPrompt("Always allow on your Mac",
-			"A glob over the whole command; * matches anything. Commands that match run on the Mac without asking.",
+		label := m.hostLabel(host)
+		m.prompt = newPrompt("Always allow on "+label,
+			"A glob over the whole command; * matches anything. Commands that match run there without asking.",
 			[]string{"Pattern"}, []string{"e.g. git status*  or  brew list*"},
 			func(m *model, v []string) (tea.Cmd, string) {
 				if v[0] == "" || v[0] == "*" {
-					return nil, "give a specific pattern — for everything, use a Mac bypass (b) so it can expire"
+					return nil, "give a specific pattern — for everything, use a bypass (b) so it can expire"
 				}
-				return m.call("✓ Added to the Mac allow list", func(ctx context.Context) error { return client.MacAllow(ctx, v[0], false) }), ""
+				return m.call("✓ Added to the "+label+" allow list", func(ctx context.Context) error { return client.HostAllow(ctx, host, v[0], false) }), ""
 			})
 	case "X":
 		if len(m.st.Cache) == 0 {
@@ -200,12 +240,15 @@ func (m *model) settingsKey(k string) tea.Cmd {
 				return err
 			})
 		}
+		if r.kind == 'h' {
+			return nil
+		}
 		if r.kind == 'a' {
-			return m.call("✓ Removed from the Mac allow list", func(ctx context.Context) error { return client.MacAllow(ctx, r.id, true) })
+			return m.call("✓ Removed from the "+m.hostLabel(r.host)+" allow list", func(ctx context.Context) error { return client.HostAllow(ctx, r.host, r.id, true) })
 		}
 		if r.kind == 'g' {
 			id, _ := strconv.Atoi(r.id)
-			return m.call(fmt.Sprintf("✓ Mac grant #%d revoked", id), func(ctx context.Context) error { return client.RevokeGrant(ctx, id) })
+			return m.call(fmt.Sprintf("✓ %s grant #%d revoked", m.hostLabel(r.host), id), func(ctx context.Context) error { return client.RevokeGrant(ctx, id) })
 		}
 		if r.kind == 'c' {
 			return m.call("✓ Cron removed from auto-approval", func(ctx context.Context) error { return client.RevokeCron(ctx, r.id) })
@@ -308,22 +351,22 @@ func (m *model) settingsView(w, h int) string {
 		}
 		out = append(out, line("k:"+e.Name, fit(src, 11)+fit(sBright.Render(name), 48)+sDim.Render("cached "+view.Ago(e.CachedAt, m.now))))
 	}
-	if mac := m.st.Mac; mac.Configured {
-		out = append(out, "", section("Your Mac · "+mac.Host, "t test · b bypass · a always allow · x remove"), "")
+	for _, h := range m.hosts() {
+		out = append(out, "", section(h.Label+" · "+h.Host, "t test · b bypass · a always allow · x remove"), "")
 		status := sDim.Render("not tested yet — press t")
-		if lt := mac.LastTest; lt != nil {
+		if lt := h.LastTest; lt != nil {
 			if lt.OK {
 				status = sMint.Render("● reachable") + sDim.Render("  "+lt.Detail+" · checked "+view.Ago(lt.At, m.now))
 			} else {
 				status = sRed.Render("○ unreachable") + sDim.Render("  "+trunc(lt.Detail, w-40))
 			}
 		}
-		bypass := sDim.Render("Every Mac command asks.")
-		if len(m.macBypass()) > 0 {
-			bypass = sOrange.Bold(true).Render("⚡ Mac bypass on") + sDim.Render(" — every Mac command runs without asking")
+		bypass := sDim.Render("   every command there asks")
+		if len(m.hostBypass(h.Name)) > 0 {
+			bypass = sOrange.Bold(true).Render("   ⚡ bypass on") + sDim.Render(" — every command there runs without asking")
 		}
-		out = append(out, "  "+status, "  "+bypass)
-		for _, g := range m.macGrants() {
+		out = append(out, line("h:"+h.Name, status+bypass))
+		for _, g := range m.hostGrants(h.Name) {
 			who := "every session"
 			if g.Session != "*" {
 				who = view.SessionTitle(m.sessions, g.Session)
@@ -332,14 +375,14 @@ func (m *model) settingsView(w, h int) string {
 			if g.ExpiresAt != nil {
 				exp = view.Remaining(*g.ExpiresAt, m.now) + " left"
 			}
-			out = append(out, line(fmt.Sprintf("mg:%d", g.ID), sLav.Render(fmt.Sprintf("grant #%d ", g.ID))+sBright.Render(trunc(who, 30))+sDim.Render("  "+g.Profile+" · "+g.Credentials.String()+" · "+exp)))
+			out = append(out, line(fmt.Sprintf("hg:%s:%d", h.Name, g.ID), sLav.Render(fmt.Sprintf("grant #%d ", g.ID))+sBright.Render(trunc(who, 30))+sDim.Render("  "+g.Profile+" · "+g.Credentials.String()+" · "+exp)))
 		}
 		out = append(out, "", "  "+sLav.Render("Always allowed:"))
-		if len(mac.Allow) == 0 {
-			out = append(out, "  "+sDim.Render("nothing yet — approve a Mac request with A, or add a pattern with a"))
+		if len(h.Allow) == 0 {
+			out = append(out, "  "+sDim.Render("nothing yet — approve one of its requests with A, or add a pattern with a"))
 		}
-		for _, p := range mac.Allow {
-			out = append(out, line("ma:"+p, sCyan.Render(p)))
+		for _, p := range h.Allow {
+			out = append(out, line("ha:"+h.Name+":"+p, sCyan.Render(p)))
 		}
 	}
 	out = append(out, "", section("MCP servers", "n connect · x remove"), "")

@@ -105,14 +105,30 @@ func FullGrant(g api.Grant) bool {
 	switch g.Target {
 	case "browser":
 		return g.Arc.Any
-	case "mac":
-		return g.Profile == "*" && g.Credentials.Any
-	default:
+	case "", "eldar":
 		return g.Profile == "*" && g.Credentials.Any && g.Aws.Any
+	default: // a remote host: no AWS there
+		return g.Profile == "*" && g.Credentials.Any
 	}
 }
 
-// IsEldarGrant: a grant for commands in the agent container.
+// EntryHost is the remote host an audit entry ran on ("" for Eldar's VM and
+// everything else), and EntryCommand its command without the "<host>: " prefix.
+func EntryHost(e api.AuditEntry) string {
+	if e.Target == "" || e.Target == "eldar" || e.Target == "browser" {
+		return ""
+	}
+	return e.Target
+}
+
+func EntryCommand(e api.AuditEntry) string {
+	if h := EntryHost(e); h != "" {
+		return strings.TrimPrefix(e.Action, h+": ")
+	}
+	return e.Action
+}
+
+// IsEldarGrant: a grant for commands in Eldar's VM.
 func IsEldarGrant(g api.Grant) bool { return g.Target == "" || g.Target == "eldar" }
 
 // AwsScope describes the AWS roles a grant covers.
@@ -326,16 +342,21 @@ func CredsOf(p api.Pending) string {
 
 // KindLabel names a pending request's kind.
 func KindLabel(kind string) string {
-	return KindLabelFor(kind, "")
+	return KindLabelFor(kind, "", "")
 }
 
 // KindLabelFor names a request, marking ones that run on the Mac.
-func KindLabelFor(kind, target string) string {
-	if kind == "browser" {
-		return "ARC ON YOUR MAC"
+// KindLabelFor labels a pending request; host is the remote host's label
+// (Pending.Host) for requests that run on one.
+func KindLabelFor(kind, target, host string) string {
+	if host == "" {
+		host = target
 	}
-	if target == "mac" {
-		return "ON YOUR MAC"
+	if kind == "browser" {
+		return "BROWSER ON " + strings.ToUpper(host)
+	}
+	if target != "" && target != "eldar" {
+		return "ON " + strings.ToUpper(host)
 	}
 	if kind == "grant_request" {
 		return "GRANT REQUEST"

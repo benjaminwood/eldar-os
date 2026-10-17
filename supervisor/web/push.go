@@ -243,7 +243,7 @@ func pendingNotice(pd api.Pending, sessions []view.Session) notice {
 		meta += " · Arc " + pd.ArcProfileName
 	}
 	return notice{
-		Title:   fmt.Sprintf("Approve #%d? %s", pd.ID, strings.ToLower(view.KindLabelFor(pd.Kind, pd.Target))),
+		Title:   fmt.Sprintf("Approve #%d? %s", pd.ID, strings.ToLower(view.KindLabelFor(pd.Kind, pd.Target, pd.Host))),
 		Body:    body + "\n" + meta,
 		Tag:     fmt.Sprintf("pending-%d", pd.ID),
 		ID:      pd.ID,

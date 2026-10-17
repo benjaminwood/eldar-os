@@ -433,3 +433,19 @@ func (c *Client) AwsStatus(ctx context.Context) ([]struct {
 	err := c.do(ctx, "GET", "/admin/aws", nil, &r)
 	return r.Sessions, err
 }
+
+// HostTest checks the SSH connection to a remote host (by name).
+func (c *Client) HostTest(ctx context.Context, host string) (MacTest, error) {
+	var t MacTest
+	err := c.do(ctx, "POST", "/admin/hosts/"+url.PathEscape(host)+"/test", map[string]any{}, &t)
+	return t, err
+}
+
+// HostAllow adds (or, with remove, deletes) a pattern in a host's allow list.
+func (c *Client) HostAllow(ctx context.Context, host, pattern string, remove bool) error {
+	method := "POST"
+	if remove {
+		method = "DELETE"
+	}
+	return c.do(ctx, method, "/admin/hosts/"+url.PathEscape(host)+"/allow", map[string]string{"pattern": pattern}, nil)
+}

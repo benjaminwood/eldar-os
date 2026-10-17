@@ -46,10 +46,11 @@ func (m *model) grantRowView(r grantRow, w int) string {
 	if g := r.grant; g != nil {
 		kind = sAccent.Render(fmt.Sprintf("grant #%d", g.ID))
 		switch g.Target {
-		case "mac":
-			kind = sLav.Bold(true).Render(fmt.Sprintf("MAC grant #%d", g.ID))
+		case "eldar", "":
 		case "browser":
-			kind = sLav.Bold(true).Render(fmt.Sprintf("ARC grant #%d", g.ID))
+			kind = sLav.Bold(true).Render(fmt.Sprintf("BROWSER grant #%d", g.ID))
+		default: // a remote host
+			kind = sLav.Bold(true).Render(fmt.Sprintf("%s grant #%d", strings.ToUpper(g.Target), g.ID))
 		}
 		who = "every session"
 		if g.Session != "*" {
@@ -88,11 +89,15 @@ func (m *model) grantRowView(r grantRow, w int) string {
 			color = t.Orange
 		}
 	} else if b := r.browser; b != nil {
-		kind = sLav.Bold(true).Render(fmt.Sprintf("ARC #%d", b.ID))
+		kind = sLav.Bold(true).Render(fmt.Sprintf("BROWSER #%d", b.ID))
 		who = view.SessionTitle(m.sessions, b.SessionID)
-		scope = "drive Arc on your Mac"
+		on := m.hostLabel(b.Host)
+		if on == "" {
+			on = "a remote host"
+		}
+		scope = "drive a browser on " + on
 		if b.ProfileName != "" {
-			scope = "drive Arc (" + b.ProfileName + ") on your Mac"
+			scope = "drive " + b.ProfileName + " on " + on
 		}
 		color = t.Orange
 		exp = view.Remaining(b.ExpiresAt, m.now) + " left"

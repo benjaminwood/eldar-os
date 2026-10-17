@@ -206,14 +206,14 @@ func (m *model) activityView(w, h int) string {
 		if ts, err := time.Parse(time.RFC3339Nano, e.Timestamp); err == nil {
 			when = ts.Local().Format("Jan 2 15:04:05")
 		}
-		mac := strings.HasPrefix(e.Action, "mac: ") || e.Target == "mac"
-		action, more := view.CommandSummary(strings.TrimPrefix(e.Action, "mac: "))
+		host := view.EntryHost(e)
+		action, more := view.CommandSummary(view.EntryCommand(e))
 		if more > 0 {
 			action += fmt.Sprintf("  (+%d lines)", more)
 		}
 		tag := ""
-		if mac {
-			tag = sLav.Bold(true).Render("MAC ")
+		if host != "" {
+			tag = sLav.Bold(true).Render(strings.ToUpper(host) + " ")
 		}
 		var bits []string
 		if e.ExitCode != nil {
@@ -288,8 +288,8 @@ func (d *auditDetail) render(m *model, maxW, maxH int) string {
 	if ts, err := time.Parse(time.RFC3339Nano, e.Timestamp); err == nil {
 		when = ts.Local().Format("Mon Jan 2 15:04:05") + " · " + view.Ago(ts.UnixMilli(), m.now)
 	}
-	command := strings.TrimPrefix(e.Action, "mac: ")
-	mac := command != e.Action || e.Target == "mac"
+	command := view.EntryCommand(e)
+	host := view.EntryHost(e)
 
 	var body []string
 	add := func(k, v string) {
@@ -307,8 +307,8 @@ func (d *auditDetail) render(m *model, maxW, maxH int) string {
 	section := func(title string) { body = append(body, "", sLav.Bold(true).Render(title)) }
 
 	cmdTitle := "Command"
-	if mac {
-		cmdTitle = "Command — on your Mac"
+	if host != "" {
+		cmdTitle = "Command — on " + m.hostLabel(host)
 	}
 	section(cmdTitle)
 	for _, l := range strings.Split(lipgloss.NewStyle().Width(inner).Render(command), "\n") {

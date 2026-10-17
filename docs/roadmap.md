@@ -59,7 +59,7 @@ jobs. Done last.
 
 - [x] `relay` channel: other agents reach Ben through Eldar (`notify_ben`)
 - [x] Commands on other hosts (configured privately), Ben's Mac first
-- [ ] The UIs list every host, not just the Mac
+- [x] The UIs list every host, not just the Mac
 - [x] Browsers on other hosts, Arc on Ben's Mac first; the bridge and patched
       extension are public: github.com/benjaminwood/arc-playwright-bridge
 - [ ] Reload the patched extension in Arc from the bridge's checkout (it's

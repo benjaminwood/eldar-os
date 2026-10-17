@@ -178,6 +178,9 @@ func (s *server) routes(auth bool) http.Handler {
 	mux.HandleFunc("POST /api/herdr/launch", s.herdrLaunch)
 	mux.HandleFunc("POST /api/herdr/close", s.herdrClose)
 	mux.HandleFunc("POST /api/herdr/shell", s.herdrShell)
+	mux.HandleFunc("POST /api/hosts/{name}/test", s.hostTest)
+	mux.HandleFunc("POST /api/hosts/{name}/allow", s.hostAllow(false))
+	mux.HandleFunc("DELETE /api/hosts/{name}/allow", s.hostAllow(true))
 	mux.HandleFunc("POST /api/mac/test", s.macTest)
 	mux.HandleFunc("POST /api/mac/allow", s.macAllow(false))
 	mux.HandleFunc("DELETE /api/mac/allow", s.macAllow(true))
@@ -583,6 +586,27 @@ func (s *server) herdrClose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok2(w, s.cfg.Client.CloseClaude(r.Context(), b.PaneID, ""))
+}
+
+func (s *server) hostTest(w http.ResponseWriter, r *http.Request) {
+	t, err := s.cfg.Client.HostTest(r.Context(), r.PathValue("name"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, t)
+}
+
+func (s *server) hostAllow(remove bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, ok := readBody[struct {
+			Pattern string `json:"pattern"`
+		}](w, r)
+		if !ok {
+			return
+		}
+		ok2(w, s.cfg.Client.HostAllow(r.Context(), r.PathValue("name"), b.Pattern, remove))
+	}
 }
 
 func (s *server) macTest(w http.ResponseWriter, r *http.Request) {

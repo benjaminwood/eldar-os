@@ -59,13 +59,27 @@ var durations = []duration{
 
 type opt struct{ value, label string }
 
-const (
-	tEldar = iota
-	tMac
-	tBrowser
-)
+// grantTargets: what a grant can cover, for this editor: Eldar, each remote
+// host agents may run commands on, and browser windows.
+func grantTargets(m *model) []opt {
+	out := []opt{{"eldar", "Eldar (commands in its VM)"}}
+	for _, h := range m.hosts() {
+		out = append(out, opt{h.Name, h.Label + " (commands over SSH)"})
+	}
+	return append(out, opt{"browser", "Browser windows"})
+}
 
-var targetOpts = []opt{{"eldar", "Eldar (agent container)"}, {"mac", "Your Mac (commands over SSH)"}, {"browser", "Arc on your Mac"}}
+// The target kinds the editor's fields depend on.
+func (e *editor) isEldar() bool   { return e.targets[e.target].value == "eldar" }
+func (e *editor) isBrowser() bool { return e.targets[e.target].value == "browser" }
+func (e *editor) isHost() bool    { return !e.isEldar() && !e.isBrowser() }
+func (e *editor) setTarget(v string) {
+	for i, o := range e.targets {
+		if o.value == v {
+			e.target = i
+		}
+	}
+}
 
 const listRows = 7
 
@@ -73,7 +87,8 @@ const listRows = 7
 type editor struct {
 	approveID int  // approve this pending request once the grant exists
 	request   bool // approveID is a grant request: approve it with this form's scope
-	target    int  // tEldar | tMac | tBrowser
+	targets   []opt
+	target    int // index into targets
 	durs      []duration
 
 	sessOpts []opt
@@ -102,9 +117,10 @@ type editor struct {
 
 func newEditor(m *model, session string) *editor {
 	e := &editor{
+		targets: grantTargets(m),
 		durIdx: 1, awsMode: modeNone, durs: durations,
 		creds: newMultiSelect("credentials", listRows), aws: newMultiSelect("AWS roles", listRows),
-		arc: newMultiSelect("Arc profiles", listRows), arcNames: map[string]string{},
+		arc: newMultiSelect("browser profiles", listRows), arcNames: map[string]string{},
 	}
 	e.sessOpts = []opt{{"*", "All sessions"}}
 	found := session == "*"
@@ -178,7 +194,7 @@ func editorFromPending(m *model, p api.Pending) *editor {
 	}
 	e.focus = fDuration
 	if p.Kind == "browser" {
-		e.target = tBrowser
+		e.setTarget("browser")
 		if p.ArcProfile != "" {
 			e.arcMode = modeOnly
 			e.arc.checked[p.ArcProfile] = true
@@ -189,8 +205,8 @@ func editorFromPending(m *model, p api.Pending) *editor {
 		}
 		return e
 	}
-	if p.Target == "mac" {
-		e.target = tMac
+	if p.Target != "" {
+		e.setTarget(p.Target)
 	}
 	for i, pr := range e.profOpts {
 		if pr == p.Profile {
@@ -220,7 +236,7 @@ func editorFromPending(m *model, p api.Pending) *editor {
 func editorFromGrantRequest(m *model, p api.Pending, g api.GrantInput) *editor {
 	e := newEditor(m, g.Session)
 	e.approveID, e.request, e.focus = p.ID, true, fDuration
-	e.target = map[string]int{"mac": tMac, "browser": tBrowser}[g.Target]
+	e.setTarget(g.Target)
 	for i, pr := range e.profOpts {
 		if pr == g.Profile {
 			e.profIdx = i
@@ -268,7 +284,7 @@ func (e *editor) profile() string { return e.profOpts[e.profIdx] }
 
 func (e *editor) loadCreds(m *model) tea.Cmd {
 	prof := e.profile()
-	if e.target == tBrowser || prof == "*" || e.credsFor == prof {
+	if e.isBrowser() || prof == "*" || e.credsFor == prof {
 		return nil
 	}
 	e.loading, e.credsErr = true, ""
@@ -302,17 +318,17 @@ func (e *editor) setCreds(msg credsMsg) {
 func (e *editor) fieldEnabled(f field) bool {
 	switch f {
 	case fProfile, fCredMode:
-		return e.target != tBrowser
+		return !e.isBrowser()
 	case fCredList:
-		return e.target != tBrowser && e.credMode == modeOnly
+		return !e.isBrowser() && e.credMode == modeOnly
 	case fAwsMode:
-		return e.target == tEldar
+		return e.isEldar()
 	case fAwsList:
-		return e.target == tEldar && e.awsMode == modeOnly
+		return e.isEldar() && e.awsMode == modeOnly
 	case fArcMode:
-		return e.target == tBrowser
+		return e.isBrowser()
 	case fArcList:
-		return e.target == tBrowser && e.arcMode == modeOnly
+		return e.isBrowser() && e.arcMode == modeOnly
 	}
 	return true
 }
@@ -351,7 +367,7 @@ func nextMode(modes []int, cur, d int) int {
 func (e *editor) cycle(m *model, d int) tea.Cmd {
 	switch e.focus {
 	case fTarget:
-		e.target = (e.target + d + len(targetOpts)) % len(targetOpts)
+		e.target = (e.target + d + len(e.targets)) % len(e.targets)
 		return e.loadCreds(m)
 	case fSession:
 		e.sessIdx = (e.sessIdx + d + len(e.sessOpts)) % len(e.sessOpts)
@@ -422,7 +438,7 @@ func scope(mode int, sel []string) api.Creds {
 
 func (e *editor) input() (api.GrantInput, error) {
 	in := api.GrantInput{
-		Target:      targetOpts[e.target].value,
+		Target:      e.targets[e.target].value,
 		Session:     e.sessOpts[e.sessIdx].value,
 		Profile:     e.profile(),
 		Minutes:     e.durs[e.durIdx].min,
@@ -431,7 +447,7 @@ func (e *editor) input() (api.GrantInput, error) {
 		Aws:         api.Creds{Names: []string{}},
 		Arc:         api.Creds{Names: []string{}},
 	}
-	if e.target == tBrowser {
+	if e.isBrowser() {
 		in.Profile = "*"
 		in.Arc = scope(e.arcMode, e.arc.selected())
 		if e.arcMode == modeOnly {
@@ -452,7 +468,7 @@ func (e *editor) input() (api.GrantInput, error) {
 	if e.credMode == modeOnly && len(in.Credentials.Names) == 0 {
 		return in, fmt.Errorf("pick at least one credential, or choose None")
 	}
-	if e.target == tEldar {
+	if e.isEldar() {
 		in.Aws = scope(e.awsMode, e.aws.selected())
 		if e.awsMode == modeOnly && len(in.Aws.Names) == 0 {
 			return in, fmt.Errorf("pick at least one AWS role, or choose None")
@@ -649,12 +665,12 @@ func (e *editor) summary(m *model) string {
 	}
 	b := sBright.Render
 	var s string
-	if e.target == tBrowser {
-		prof := "any Arc profile"
+	if e.isBrowser() {
+		prof := "any browser profile"
 		if e.arcMode == modeOnly {
-			prof = pickedSummary(e.arc, func(v string) string { return e.arcNames[v] }, "Arc profiles")
+			prof = pickedSummary(e.arc, func(v string) string { return e.arcNames[v] }, "browser profiles")
 		}
-		s = fmt.Sprintf("Open Arc windows on your Mac for %s in %s without asking, %s. Each window lasts no longer than the grant.", b(who), b(prof), b(dur))
+		s = fmt.Sprintf("Open browser windows for %s in %s without asking, %s. Each window lasts no longer than the grant.", b(who), b(prof), b(dur))
 	} else {
 		prof := "any profile"
 		if in.Profile != "*" {
@@ -665,8 +681,8 @@ func (e *editor) summary(m *model) string {
 			creds = pickedSummary(e.creds, func(v string) string { return v }, "credentials")
 		}
 		where, aws := "", ""
-		if e.target == tMac {
-			where = " on your Mac"
+		if e.isHost() {
+			where = " on " + m.hostLabel(e.targets[e.target].value)
 		} else {
 			aws = map[int]string{modeAny: "any AWS role", modeNone: "no AWS"}[e.awsMode]
 			if e.awsMode == modeOnly {
@@ -738,15 +754,15 @@ func (e *editor) render(m *model, maxW, maxH int) string {
 		title = fmt.Sprintf("Grant + approve #%d", e.approveID)
 	}
 	rows = append(rows, gradient("⚡ "+title, t.Orange, t.Accent, true), "")
-	rows = append(rows, label(fTarget, "Target")+cycler(fTarget, "tgt", targetOpts[e.target].label))
+	rows = append(rows, label(fTarget, "Target")+cycler(fTarget, "tgt", e.targets[e.target].label))
 	rows = append(rows, label(fSession, "Session")+cycler(fSession, "sess", e.sessOpts[e.sessIdx].label))
 
-	if e.target == tBrowser {
+	if e.isBrowser() {
 		rows = append(rows, label(fArcMode, "Arc")+radios(fArcMode, arcModes, e.arcMode, nil))
 		if e.arcMode == modeOnly {
 			err := ""
 			if len(e.arc.items) == 0 {
-				err = "no Arc profiles known yet — the proxy reads them from the Mac"
+				err = "no browser profiles known yet — the supervisor reads them when a session asks"
 			}
 			addList(fArcList, e.arc, false, err)
 		}
@@ -760,7 +776,7 @@ func (e *editor) render(m *model, maxW, maxH int) string {
 		if e.credMode == modeOnly {
 			addList(fCredList, e.creds, e.loading, e.credsErr)
 		}
-		if e.target == tEldar {
+		if e.isEldar() {
 			r := radios(fAwsMode, threeModes, e.awsMode, nil)
 			if e.awsMode == modeAny {
 				r += "  " + sOrange.Render("⚠ every role, admin and production included")
@@ -788,14 +804,14 @@ func (e *editor) render(m *model, maxW, maxH int) string {
 	rows = append(rows, "", lipgloss.NewStyle().Width(inner).Foreground(c(t.Fg)).Render(e.summary(m)))
 	if in, err := e.input(); err == nil && in.Session == "*" && view.FullGrant(api.Grant{Target: in.Target, Profile: in.Profile, Credentials: in.Credentials, Aws: in.Aws, Arc: in.Arc}) {
 		what := "everything here — same as global bypass"
-		switch e.target {
-		case tMac:
-			what = "every command on your Mac"
-		case tBrowser:
-			what = "every Arc profile, for every session"
+		switch {
+		case e.isHost():
+			what = "every command on " + m.hostLabel(e.targets[e.target].value)
+		case e.isBrowser():
+			what = "every browser profile, for every session"
 		}
 		rows = append(rows, sOrange.Render("This covers "+what+"."))
-	} else if e.target == tEldar && e.awsMode == modeOnly {
+	} else if e.isEldar() && e.awsMode == modeOnly {
 		for _, a := range e.aws.selected() {
 			if view.AwsRisky(a) {
 				rows = append(rows, sOrange.Render("⚠ Includes admin or production AWS roles."))

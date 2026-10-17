@@ -156,9 +156,18 @@ const awsLabel = (p) => { const i = (p || "").lastIndexOf("."); return i > 0 ? `
 const awsRisky = (p) => /admin|prod|security/i.test(p || "");
 const awsTag = (p) => `<span class="tag${awsRisky(p) ? " risky" : ""}">${awsRisky(p) ? "⚠ " : ""}AWS ${esc(awsLabel(p))}</span>`;
 const isEldarGrant = (g) => !g.target || g.target === "eldar";
+// Remote hosts agents may run commands on (Ben's Mac is "mac"); a host's name
+// is also the target of its requests and grants, and the prefix of their
+// audit actions ("mac: brew list").
+const hostOf = (t) => (S.data?.hosts || []).find((h) => h.name === t);
+const isHost = (t) => !!t && t !== "eldar" && t !== "browser" && !!hostOf(t);
+const hostLabel = (t) => hostOf(t)?.label || t;
+// An audit entry's host, if it ran on one, and its command without the prefix.
+const entryHost = (e) => (isHost(e.target) ? e.target : "");
+const entryCommand = (e) => { const h = entryHost(e); return h && e.action.startsWith(h + ": ") ? e.action.slice(h.length + 2) : e.action; };
 // A grant that covers everything its target can ask for.
 const fullGrant = (g) => g.target === "browser" ? g.arc === "*"
-  : g.target === "mac" ? g.profile === "*" && g.credentials === "*"
+  : isHost(g.target) ? g.profile === "*" && g.credentials === "*"
   : g.profile === "*" && g.credentials === "*" && g.aws === "*";
 const awsScope = (aws) => aws === "*" ? "any AWS role" : (aws || []).length ? aws.map(awsTag).join("") : "no AWS";
 
@@ -173,10 +182,10 @@ function dur(ms) {
   return `${Math.floor(h / 24)}d`;
 }
 const urgency = (sec) => (sec < 20 ? "var(--red)" : sec < 60 ? "var(--orange)" : "var(--mint)");
-const kindLabel = (k, target) => (k === "browser" ? "ARC ON YOUR MAC" : target === "mac" ? "ON YOUR MAC" : k === "grant_request" ? "GRANT REQUEST" : "COMMAND");
-const kindClass = (p) => (p.kind === "browser" || p.kind === "grant_request" ? "k-bypass" : p.target === "mac" ? "k-mac" : `k-${p.kind}`);
-const macGrants = () => (S.data?.grants || []).filter((g) => g.target === "mac");
-const macBypassIds = () => macGrants().filter((g) => g.session === "*" && g.profile === "*" && g.credentials === "*").map((g) => g.id);
+const kindLabel = (k, target) => (k === "browser" ? `BROWSER ON ${hostLabel(target).toUpperCase()}` : isHost(target) ? `ON ${hostLabel(target).toUpperCase()}` : k === "grant_request" ? "GRANT REQUEST" : "COMMAND");
+const kindClass = (p) => (p.kind === "browser" || p.kind === "grant_request" ? "k-bypass" : isHost(p.target) ? "k-mac" : `k-${p.kind}`);
+const hostGrants = (h) => (S.data?.grants || []).filter((g) => g.target === h);
+const hostBypassIds = (h) => hostGrants(h).filter((g) => g.session === "*" && g.profile === "*" && g.credentials === "*").map((g) => g.id);
 const levelIcon = { full: "⚡", partial: "◐", none: "○", locked: "■" };
 const levelText = { full: "BYPASS", partial: "partial", none: "asks", locked: "locked" };
 
@@ -347,18 +356,18 @@ function pendingCard(p) {
   const scopeOf = (v, any, none, label = esc) => v === "*" ? `<span class="warn"><b>⚠ ${any}</b></span>` : !(v || []).length ? `<span class="dim">${none}</span>` : v.map(label).join("");
   const rows = gr ? [
     ["Session", sess + ` <span class="dim">· this session only</span>`],
-    ["Covers", `<b>${{ mac: "Your Mac (commands)", browser: "Arc on your Mac" }[gr.target] || "Eldar (commands)"}</b>`],
+    ["Covers", `<b>${gr.target === "browser" ? "Browser windows" : isHost(gr.target) ? `${esc(hostLabel(gr.target))} (commands)` : "Eldar (commands)"}</b>`],
     ...(gr.target === "browser"
-      ? [["Arc", scopeOf(gr.arc === "*" ? "*" : (gr.arcNames?.length ? gr.arcNames : gr.arc), "ANY Arc profile", "none", (n) => `<span class="tag">${esc(n)}</span>`)]]
+      ? [["Browser", scopeOf(gr.arc === "*" ? "*" : (gr.arcNames?.length ? gr.arcNames : gr.arc), "ANY browser profile", "none", (n) => `<span class="tag">${esc(n)}</span>`)]]
       : [["Profile", gr.profile === "*" ? `<span class="warn"><b>ANY profile</b></span>` : `<span class="tag">${esc(gr.profile)}</span>`],
          ["Creds", scopeOf(gr.credentials, "ANY credentials", "none", (c) => `<span class="tag">${esc(c)}</span>`)],
-         ...(gr.target === "mac" ? [] : [["AWS", scopeOf(gr.aws, "ANY AWS role", "no AWS", awsTag)]])]),
+         ...(isHost(gr.target) ? [] : [["AWS", scopeOf(gr.aws, "ANY AWS role", "no AWS", awsTag)]])]),
     ["For", esc(dur(p.timeoutSeconds * 1000))],
     p.reason && ["Reason", `<span class="reason">${esc(p.reason)}</span>`],
   ].filter(Boolean) : [
-    p.target === "mac" && ["Runs on", `<b class="mac">${esc(p.host || "your Mac")}</b>`],
+    isHost(p.target) && ["Runs on", `<b class="mac">${esc(p.host || hostLabel(p.target))}</b>`],
     ["Session", sess],
-    p.kind === "browser" && p.arcProfileName && ["Arc", `<b class="mac">${esc(p.arcProfileName)}</b>${p.arcSpace ? ` <span class="dim">· ${esc(p.arcSpace)} space</span>` : ""}`],
+    p.kind === "browser" && p.arcProfileName && ["Profile", `<b class="mac">${esc(p.arcProfileName)}</b>${p.arcSpace ? ` <span class="dim">· ${esc(p.arcSpace)} space</span>` : ""}`],
     p.profile && ["Profile", `<span class="tag">${esc(p.profile)}</span>`],
     creds && ["Creds", creds],
     p.awsProfile && ["AWS", `${awsTag(p.awsProfile)} <span class="dim">minted STS credentials</span>`],
@@ -367,8 +376,8 @@ function pendingCard(p) {
     p.reason && [p.kind === "browser" ? "First action" : "Reason", `<span class="reason">${esc(p.reason)}</span>`],
   ].filter(Boolean);
   const extra = S.extra.has(p.id) || gr
-    ? `<div class="p-extra">${isExec ? `<button class="btn btn-small btn-ghost" data-action="decide" data-d="allow_always" data-id="${p.id}">✓ Always allow <code>${esc(p.allowAlwaysPattern || (p.command || "").split(" ")[0] + " *")}</code>${p.target === "mac" ? " on your Mac" : ""}</button>` : ""}
-       <button class="btn btn-small btn-warn" data-action="grant-from" data-id="${p.id}">${gr ? "◐ Review / narrow the scope…" : `⚡ Grant ${p.kind === "browser" ? "Arc access" : `a ${p.target === "mac" ? "Mac " : ""}bypass`}${isExec || p.kind === "browser" ? " + approve" : ""}…`}</button></div>`
+    ? `<div class="p-extra">${isExec ? `<button class="btn btn-small btn-ghost" data-action="decide" data-d="allow_always" data-id="${p.id}">✓ Always allow <code>${esc(p.allowAlwaysPattern || (p.command || "").split(" ")[0] + " *")}</code>${isHost(p.target) ? ` on ${esc(hostLabel(p.target))}` : ""}</button>` : ""}
+       <button class="btn btn-small btn-warn" data-action="grant-from" data-id="${p.id}">${gr ? "◐ Review / narrow the scope…" : `⚡ Grant ${p.kind === "browser" ? "browser access" : `a ${isHost(p.target) ? esc(hostLabel(p.target)) + " " : ""}bypass`}${isExec || p.kind === "browser" ? " + approve" : ""}…`}</button></div>`
     : "";
   return `<article class="card pending${marked ? " marked" : ""}" id="p${p.id}" data-id="${p.id}">
     <div class="p-head">
@@ -625,10 +634,10 @@ function viewGrants() {
     const who = g.session === "*" ? "All sessions" : sessionTitle(g.session);
     const creds = g.credentials === "*" ? "any credentials" : g.credentials.length ? g.credentials.map((c) => `<span class="tag">${esc(c)}</span>`).join("") : "no credentials";
     let scope;
-    if (g.target === "browser") scope = `open Arc windows in ${g.arc === "*" ? `<span class="warn"><b>any Arc profile</b></span>` : (g.arcNames?.length ? g.arcNames : g.arc || []).map((n) => `<b class="mac">${esc(n)}</b>`).join(", ")}`;
+    if (g.target === "browser") scope = `open browser windows in ${g.arc === "*" ? `<span class="warn"><b>any browser profile</b></span>` : (g.arcNames?.length ? g.arcNames : g.arc || []).map((n) => `<b class="mac">${esc(n)}</b>`).join(", ")}`;
     else if (fullGrant(g)) scope = `<span class="warn"><b>everything</b></span>`;
     else scope = `${g.profile === "*" ? "any profile" : `<span class="tag">${esc(g.profile)}</span>`} · ${creds}${isEldarGrant(g) ? ` · ${awsScope(g.aws)}` : ""}`;
-    const chip = g.target === "mac" ? ["k-mac", "MAC "] : g.target === "browser" ? ["k-mac", "ARC "] : ["k-bypass", ""];
+    const chip = isHost(g.target) ? ["k-mac", g.target.toUpperCase() + " "] : g.target === "browser" ? ["k-mac", "BROWSER "] : ["k-bypass", ""];
     return `<div class="card grant">
       <div><span class="chip ${chip[0]}" style="margin-right:6px">${chip[1]}GRANT #${g.id}</span><span class="who">${esc(who)}</span><div class="scope" style="margin-top:6px">${scope}</div></div>
       <div style="text-align:right">${exp(g.expiresAt)}<div style="margin-top:8px"><button class="btn btn-small btn-deny" data-action="revoke-grant" data-id="${g.id}">Revoke</button></div></div>
@@ -636,7 +645,7 @@ function viewGrants() {
     </div>`;
   });
   const arc = (d.browserGrants || []).map((b) => `<div class="card grant">
-      <div><span class="chip k-bypass" style="margin-right:6px">ARC #${b.id}</span><span class="who">${esc(sessionTitle(b.sessionId))}</span><div class="scope" style="margin-top:6px">drives Arc${b.profileName ? ` <span class="tag">${esc(b.profileName)}</span>` : ""} on your Mac${b.channels ? ` · <span class="ok">connected</span>` : ""}</div></div>
+      <div><span class="chip k-bypass" style="margin-right:6px">BROWSER #${b.id}</span><span class="who">${esc(sessionTitle(b.sessionId))}</span><div class="scope" style="margin-top:6px">drives${b.profileName ? ` <span class="tag">${esc(b.profileName)}</span>` : " a browser"} on ${esc(hostLabel(b.host || "mac"))}${b.space ? ` <span class="dim">· ${esc(b.space)} space</span>` : ""}${b.channels ? ` · <span class="ok">connected</span>` : ""}</div></div>
       <div style="text-align:right">${exp(b.expiresAt)}<div style="margin-top:8px"><button class="btn btn-small btn-deny" data-action="revoke-browser" data-id="${b.id}">End</button></div></div>
       <div class="foot">${esc(b.client)}</div>
     </div>`);
@@ -675,12 +684,12 @@ function viewSettings() {
       <span style="min-width:0"><div class="t">Lock now</div><div class="s">Face ID again before anything shows</div></span>
     </button>
     ${cacheSection(22)}
-    ${macSection()}
-    <div class="section-head" style="margin-top:28px"><h1>MCP servers</h1><button class="btn btn-small btn-accent" data-action="mcp-new">+ Connect</button></div>
-    <div class="card list">${servers || `<p class="dim" style="padding:12px;margin:0">None registered.</p>`}</div>
-    <div class="section-head" style="margin-top:22px"><h1>Cron auto-approval</h1><button class="btn btn-small btn-ghost" data-action="cron-new">+ Allow</button></div>
+    ${hostsSection()}
+    ${servers ? `<div class="section-head" style="margin-top:28px"><h1>MCP servers</h1></div>
+    <div class="card list">${servers}</div>` : ""}
+    ${cronRows ? `<div class="section-head" style="margin-top:22px"><h1>Cron auto-approval</h1></div>
     <p class="dim" style="margin:-6px 2px 10px;font-size:13px">While one of these crons is running, its requests are approved without asking.</p>
-    <div class="card list">${cronRows || `<p class="dim" style="padding:12px;margin:0">None allowed.</p>`}</div>`;
+    <div class="card list">${cronRows}</div>` : ""}`;
 }
 
 function cacheSection(top) {
@@ -691,34 +700,36 @@ function cacheSection(top) {
     <div class="s">${e.kind === "aws" ? "AWS STS" : "1Password"} · cached <span data-ago="${e.cachedAt}"></span></div></span>
     <span class="right"><button class="btn btn-small btn-ghost" data-action="cache-clear" data-name="${esc(e.name)}">Clear</button></span></div>`).join("");
   return `<div class="section-head" style="margin-top:${top}px"><h1>Credential cache</h1>${cache.length ? `<button class="btn btn-small btn-ghost" data-action="cache-clear">Clear all</button>` : ""}</div>
-    <p class="dim" style="margin:-6px 2px 10px;font-size:13px">The proxy keeps each profile's credentials after the first fetch. Clear one after rotating a secret in 1Password; the next request fetches it again.</p>
+    <p class="dim" style="margin:-6px 2px 10px;font-size:13px">The supervisor keeps each profile's credentials after the first fetch. Clear one after rotating a secret in 1Password; the next request fetches it again.</p>
     <div class="card list">${rows || `<p class="dim" style="padding:12px;margin:0">Empty. The next request for a profile fetches from 1Password.</p>`}</div>`;
 }
 
-function macSection() {
-  const mac = S.data.mac;
-  if (!mac?.configured) return "";
-  const lt = mac.lastTest;
-  const status = !lt ? `<span class="dim">Not tested yet</span>`
-    : lt.ok ? `<span class="ok">● reachable</span> <span class="dim">· ${esc(lt.detail)} · checked <span data-ago="${lt.at}"></span></span>`
-    : `<span class="bad">○ unreachable</span> <span class="dim">· ${esc(lt.detail)}</span>`;
-  const bypass = macBypassIds().length > 0;
-  const grants = macGrants().map((g) => `<div class="row static"><span class="lvl lvl-${g.session === "*" && g.profile === "*" && g.credentials === "*" ? "full" : "partial"}">⚡</span>
-    <span style="min-width:0"><div class="t">${g.session === "*" ? "All sessions" : esc(sessionTitle(g.session))}</div>
-    <div class="s">${g.profile === "*" ? "any profile" : esc(g.profile)} · ${g.credentials === "*" ? "any credentials" : esc(g.credentials.join(", ") || "no credentials")} · ${g.expiresAt ? `<span data-exp="${g.expiresAt}" data-suffix=" left"></span>` : "until revoked"}</div></span>
-    <span class="right"><button class="btn btn-small btn-ghost" data-action="revoke-grant" data-id="${g.id}">Revoke</button></span></div>`).join("");
-  const allow = (mac.allow || []).map((p) => `<div class="row static"><span class="lvl dim">✓</span><span style="min-width:0"><div class="t mono" style="font-size:13px">${esc(p)}</div></span>
-    <span class="right"><button class="btn btn-small btn-ghost" data-action="mac-allow-remove" data-p="${esc(p)}">Remove</button></span></div>`).join("");
-  return `<div class="section-head" style="margin-top:28px"><h1>Your Mac</h1><button class="btn btn-small btn-ghost" data-action="mac-test">Test</button></div>
+// One section per remote host agents may run commands on.
+function hostsSection() {
+  return (S.data.hosts || []).filter((h) => h.configured).map((h) => {
+    const lt = h.lastTest;
+    const status = !lt ? `<span class="dim">Not tested yet</span>`
+      : lt.ok ? `<span class="ok">● reachable</span> <span class="dim">· ${esc(lt.detail)} · checked <span data-ago="${lt.at}"></span></span>`
+      : `<span class="bad">○ unreachable</span> <span class="dim">· ${esc(lt.detail)}</span>`;
+    const bypass = hostBypassIds(h.name).length > 0;
+    const grants = hostGrants(h.name).map((g) => `<div class="row static"><span class="lvl lvl-${g.session === "*" && g.profile === "*" && g.credentials === "*" ? "full" : "partial"}">⚡</span>
+      <span style="min-width:0"><div class="t">${g.session === "*" ? "All sessions" : esc(sessionTitle(g.session))}</div>
+      <div class="s">${g.profile === "*" ? "any profile" : esc(g.profile)} · ${g.credentials === "*" ? "any credentials" : esc(g.credentials.join(", ") || "no credentials")} · ${g.expiresAt ? `<span data-exp="${g.expiresAt}" data-suffix=" left"></span>` : "until revoked"}</div></span>
+      <span class="right"><button class="btn btn-small btn-ghost" data-action="revoke-grant" data-id="${g.id}">Revoke</button></span></div>`).join("");
+    const allow = (h.allow || []).map((p) => `<div class="row static"><span class="lvl dim">✓</span><span style="min-width:0"><div class="t mono" style="font-size:13px">${esc(p)}</div></span>
+      <span class="right"><button class="btn btn-small btn-ghost" data-action="host-allow-remove" data-host="${esc(h.name)}" data-p="${esc(p)}">Remove</button></span></div>`).join("");
+    const label = esc(h.label);
+    return `<div class="section-head" style="margin-top:28px"><h1>${label}</h1><button class="btn btn-small btn-ghost" data-action="host-test" data-host="${esc(h.name)}">Test</button></div>
     <div class="card conn-card">
-      <div style="font-size:13.5px"><b class="mac">${esc(mac.host)}</b> · ${status}</div>
-      <p class="dim" style="font-size:13px;margin:8px 0 12px">Eldar runs commands here with your approval. Your Eldar bypasses never cover the Mac — only what's below.</p>
-      <button class="btn ${bypass ? "btn-ghost" : "btn-mac"}" style="width:100%" data-action="mac-bypass">${bypass ? "○ Turn Mac bypass off" : "⚡ Bypass your Mac…"}</button>
+      <div style="font-size:13.5px"><b class="mac">${esc(h.host)}</b> · ${status}</div>
+      <p class="dim" style="font-size:13px;margin:8px 0 12px">${h.description ? esc(h.description) + " " : ""}Agents run commands here with your approval. Bypasses for Eldar never cover it, only what's below.</p>
+      <button class="btn ${bypass ? "btn-ghost" : "btn-mac"}" style="width:100%" data-action="host-bypass" data-host="${esc(h.name)}">${bypass ? `○ Turn the ${label} bypass off` : `⚡ Bypass ${label}…`}</button>
     </div>
     ${grants ? `<div class="card list" style="margin-bottom:12px">${grants}</div>` : ""}
-    <div class="space-head"><span class="space-name">Always allowed on your Mac</span></div>
-    <div class="card list">${allow || `<p class="dim" style="padding:12px;margin:0">Nothing yet. Approve a Mac request with “Always allow”, or add a pattern.</p>`}
-      <div class="paste" style="padding:10px"><input class="input mono" id="mac-pattern" placeholder="e.g. git status*" autocomplete="off" autocapitalize="off"><button class="btn btn-small btn-ghost" data-action="mac-allow-add">Add</button></div></div>`;
+    <div class="space-head"><span class="space-name">Always allowed on ${label}</span></div>
+    <div class="card list">${allow || `<p class="dim" style="padding:12px;margin:0">Nothing yet. Approve one of its requests with “Always allow”, or add a pattern.</p>`}
+      <div class="paste" style="padding:10px"><input class="input mono" id="host-pattern-${esc(h.name)}" placeholder="e.g. git status*" autocomplete="off" autocapitalize="off"><button class="btn btn-small btn-ghost" data-action="host-allow-add" data-host="${esc(h.name)}">Add</button></div></div>`;
+  }).join("");
 }
 
 function formSheet(title, lead, fields, action, submitLabel) {
@@ -764,7 +775,7 @@ function feedHTML() {
   const items = list.map(([e, i]) => {
     const [ico, cls] = evIcon[e.decision] || ["·", "dim"];
     const t = Date.parse(e.timestamp);
-    const mac = e.target === "mac" || e.action.startsWith("mac: ");
+    const host = entryHost(e);
     const bits = [
       e.exitCode != null ? (e.exitCode === 0 ? `<span class="ok">exit 0</span>` : `<span class="bad">exit ${e.exitCode}</span>`) : "",
       e.durationMs != null ? ms(e.durationMs) : "",
@@ -772,7 +783,7 @@ function feedHTML() {
     ].filter(Boolean).join(" · ");
     return `<button class="ev" data-action="audit" data-i="${i}">
       <span class="ico ${cls}">${ico}</span>
-      <span class="act">${mac ? `<span class="chip k-mac mini">MAC</span> ` : ""}${esc(commandSummary(e.action.replace(/^mac: /, "")))}</span>
+      <span class="act">${host ? `<span class="chip k-mac mini">${esc(host.toUpperCase())}</span> ` : ""}${esc(commandSummary(entryCommand(e)))}</span>
       <span class="when" data-ago="${t}"></span>
       <span class="why">${esc(e.decisionReason)}${e.profile ? ` · ${esc(e.profile)}` : ""}${bits ? ` · ${bits}` : ""}${e.reason ? `<br><span class="faint">${esc(e.reason)}</span>` : ""}</span>
     </button>`;
@@ -792,17 +803,17 @@ function viewActivity() {
 function auditSheet(e) {
   const [ico, cls] = evIcon[e.decision] || ["·", "dim"];
   const t = new Date(e.timestamp);
-  const mac = e.target === "mac" || e.action.startsWith("mac: ");
-  const command = e.action.replace(/^mac: /, "");
+  const host = entryHost(e);
+  const command = entryCommand(e);
   let creds = "";
   if (e.credentials === null) creds = `<span class="warn"><b>⚠ ALL</b> credentials in the profile</span>`;
   else if (Array.isArray(e.credentials)) creds = e.credentials.length ? e.credentials.map((c) => `<span class="tag">${esc(c)}</span>`).join("") : `<span class="dim">none</span>`;
   const row = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : "");
   const exit = e.exitCode != null ? (e.exitCode === 0 ? `<span class="ok">0</span>` : `<span class="bad">${e.exitCode}</span>`) : "";
-  const isCommand = e.requestId > 0 && !/^(GRANT|REVOKE|MODE|SETTINGS|UNPIN|MCP|CRON|TERMINAL|HERDR|MAC ALLOW|MAC DISALLOW|SECRETS_DUMP|AWS_CREDS_DUMP)/.test(e.action);
+  const isCommand = e.requestId > 0 && !/^(GRANT|REVOKE|MODE|SETTINGS|UNPIN|MCP|CRON|TERMINAL|HERDR|MAC ALLOW|MAC DISALLOW|ALLOW ADD|ALLOW REMOVE|BROWSER|AWS SIGN-IN|SECRETS_DUMP|AWS_CREDS_DUMP)/.test(e.action);
   return `<h2><span class="${cls}">${ico}</span> ${esc(decisionLabel[e.decision] || e.decision)}</h2>
     <p class="lead">${esc(t.toLocaleString())} · <span data-ago="${t.getTime()}"></span>${e.requestId ? ` · request #${e.requestId}` : ""}</p>
-    <div class="field"><span class="label">${mac ? `Command <span class="chip k-mac mini">ON YOUR MAC</span>` : "Action"}</span>
+    <div class="field"><span class="label">${host ? `Command <span class="chip k-mac mini">ON ${esc(hostLabel(host).toUpperCase())}</span>` : "Action"}</span>
       <pre class="audit-cmd">${esc(command)}</pre>
       <button class="btn btn-small btn-ghost" data-action="copy-cmd">Copy</button></div>
     <dl class="kv">
@@ -930,7 +941,7 @@ function newEditor(session, from) {
         ed.credMode = from.credentials.length ? "only" : "none";
         from.credentials.forEach((c) => ed.sel.creds.add(c));
       }
-      ed.target = from.target === "mac" ? "mac" : "eldar";
+      ed.target = isHost(from.target) ? from.target : "eldar";
       if (from.awsProfile) { ed.awsMode = "only"; ed.sel.aws.add(from.awsProfile); }
     }
     if (from.kind === "exec" || from.kind === "browser") ed.approve = from.id;
@@ -1031,17 +1042,17 @@ function edSummary() {
   const g = edInput();
   let s;
   if (ed.target === "browser") {
-    const prof = ed.arcMode === "any" ? "any Arc profile" : edPicked(ed.sel.arc, (id) => edItems("arc").find((x) => x.value === id)?.name || id, "Arc profiles");
-    s = `Open Arc windows on your Mac for <b>${esc(who)}</b> in <b>${esc(prof)}</b> without asking, <b>${esc(d)}</b>. Each window lasts no longer than the grant.`;
+    const prof = ed.arcMode === "any" ? "any browser profile" : edPicked(ed.sel.arc, (id) => edItems("arc").find((x) => x.value === id)?.name || id, "browser profiles");
+    s = `Open browser windows for <b>${esc(who)}</b> in <b>${esc(prof)}</b> without asking, <b>${esc(d)}</b>. Each window lasts no longer than the grant.`;
   } else {
     const prof = ed.profile === "*" ? "any profile" : `the ${ed.profile} profile`;
     const creds = ed.credMode === "any" ? "any credentials" : ed.credMode === "none" ? "no credentials" : edPicked(ed.sel.creds, (c) => c, "credentials");
     const aws = ed.target !== "eldar" ? "" : ", " + (ed.awsMode === "any" ? "any AWS role" : ed.awsMode === "none" ? "no AWS" : "AWS " + edPicked(ed.sel.aws, awsLabel, "AWS roles"));
-    s = `Auto-approve commands${ed.target === "mac" ? " on your Mac" : ""} from <b>${esc(who)}</b> using <b>${esc(prof)}</b> with <b>${esc(creds)}${esc(aws)}</b>, <b>${esc(d)}</b>.`;
+    s = `Auto-approve commands${isHost(ed.target) ? ` on ${esc(hostLabel(ed.target))}` : ""} from <b>${esc(who)}</b> using <b>${esc(prof)}</b> with <b>${esc(creds)}${esc(aws)}</b>, <b>${esc(d)}</b>.`;
   }
   if (ed.request) s += ` <span class="ok">Approves request #${ed.approve} with this scope.</span>`;
   else if (ed.approve) s += ` <span class="ok">Then approve #${ed.approve}.</span>`;
-  if (ed.session === "*" && fullGrant(g)) s += `<br><span class="warn">This covers ${ed.target === "mac" ? "every command on your Mac" : ed.target === "browser" ? "every Arc profile, for every session" : "everything here — same as global bypass"}.</span>`;
+  if (ed.session === "*" && fullGrant(g)) s += `<br><span class="warn">This covers ${isHost(ed.target) ? `every command on ${esc(hostLabel(ed.target))}` : ed.target === "browser" ? "every browser profile, for every session" : "everything here — same as global bypass"}.</span>`;
   else if (ed.target === "eldar" && (ed.awsMode === "any" || (ed.awsMode === "only" && [...ed.sel.aws].some(awsRisky)))) s += `<br><span class="warn">⚠ ${ed.awsMode === "any" ? "Every AWS role, admin and production included." : "Includes admin or production AWS roles."}</span>`;
   return s;
 }
@@ -1049,11 +1060,12 @@ function editorSheet() {
   const ed = S.ed;
   const sessOpts = [`<option value="*">All sessions</option>`, ...S.sessions.map((s) => `<option value="${esc(s.id)}"${s.id === ed.session ? " selected" : ""}>${esc(s.title)}${s.pane ? " · " + esc(s.pane) : ""}</option>`)];
   if (ed.session !== "*" && !sessionById(ed.session)) sessOpts.push(`<option value="${esc(ed.session)}" selected>session ${esc(short(ed.session))}</option>`);
-  const targets = [["eldar", "Eldar"], ...(S.data.mac?.configured ? [["mac", "Your Mac"], ["browser", "Arc"]] : [])];
+  const hosts = (S.data.hosts || []).filter((h) => h.configured);
+  const targets = [["eldar", "Eldar"], ...hosts.map((h) => [h.name, esc(h.label)]), ...(S.data.arcProfiles?.length ? [["browser", "Browsers"]] : [])];
   const targetSeg = targets.length > 1 ? `<div class="field"><span class="label">Covers</span><div class="seg">${targets.map(([v, l]) => `<button class="${ed.target === v ? "on" : ""}" data-action="ed-target" data-v="${v}">${l}</button>`).join("")}</div></div>` : "";
   let scope;
   if (ed.target === "browser") {
-    scope = `<div class="field"><span class="label">Arc profiles</span>${edModes("arc", ["any", "only"], ed.arcMode)}${ed.arcMode === "only" ? edPicker("arc", "Arc profiles") : ""}</div>`;
+    scope = `<div class="field"><span class="label">Browser profiles</span>${edModes("arc", ["any", "only"], ed.arcMode)}${ed.arcMode === "only" ? edPicker("arc", "browser profiles") : ""}</div>`;
   } else {
     const profOpts = [`<option value="*">Any profile</option>`, ...S.data.profiles.map((p) => `<option value="${esc(p)}"${p === ed.profile ? " selected" : ""}>${esc(p)}</option>`)];
     scope = `<div class="field"><label for="ed-profile">Profile</label><select class="select" id="ed-profile">${profOpts.join("")}</select></div>
@@ -1084,7 +1096,7 @@ function edRefresh(key) {
 }
 async function submitEditor() {
   const ed = S.ed;
-  const empty = ed.target === "browser" ? ed.arcMode === "only" && !ed.sel.arc.size && "Pick at least one Arc profile, or choose Any."
+  const empty = ed.target === "browser" ? ed.arcMode === "only" && !ed.sel.arc.size && "Pick at least one browser profile, or choose Any."
     : (ed.credMode === "only" && !ed.sel.creds.size && "Pick at least one credential, or choose None.")
       || (ed.target === "eldar" && ed.awsMode === "only" && !ed.sel.aws.size && "Pick at least one AWS role, or choose None.");
   if (empty) { ed.err = empty; renderSheet(); return; }
@@ -1234,7 +1246,7 @@ document.addEventListener("click", async (ev) => {
     case "audit": { const e = S.audit[Number(el.dataset.i)]; if (e) openSheet({ kind: "audit", entry: e }); return; }
     case "audit-output": return loadAuditOutput();
     case "copy-cmd": {
-      const text = (S.sheet?.entry?.action || "").replace(/^mac: /, "");
+      const text = S.sheet?.entry ? entryCommand(S.sheet.entry) : "";
       try { await navigator.clipboard.writeText(text); toast("Copied"); } catch { toast("✗ Couldn't copy", "err"); }
       return;
     }
@@ -1278,28 +1290,33 @@ document.addEventListener("click", async (ev) => {
     }
     case "ed-dur": S.ed.minutes = Number(el.dataset.m); return renderSheet();
     case "ed-target": S.ed.target = el.dataset.v; renderSheet(); return loadCreds();
-    case "mac-test": el.disabled = true; {
-      try { const t = await api("POST", "/api/mac/test"); t.ok ? toast("Mac reachable — " + t.detail) : toast("✗ Mac unreachable: " + t.detail, "err", 6000); }
+    case "host-test": el.disabled = true; {
+      const h = el.dataset.host, label = hostLabel(h);
+      try { const t = await api("POST", `/api/hosts/${encodeURIComponent(h)}/test`); t.ok ? toast(`${label} reachable — ${t.detail}`) : toast(`✗ ${label} unreachable: ${t.detail}`, "err", 6000); }
       catch (e) { toast("✗ " + e.message, "err"); }
       el.disabled = false; return;
     }
-    case "mac-bypass": {
-      const ids = macBypassIds();
-      if (ids.length) return act(Promise.all(ids.map((g) => api("DELETE", `/api/grants/${g}`))), "Mac bypass off");
-      return openSheet({ kind: "push", html: `<h2>Bypass your Mac</h2><p class="lead">Every Mac command runs without asking. Policy denies and lockdown still apply.</p>
-        <div class="chips">${[[15, "15 min"], [60, "1 hour"], [240, "4 hours"], [0, "Until I turn it off"]].map(([m, l]) => `<button data-action="mac-bypass-on" data-min="${m}">${l}</button>`).join("")}</div>
+    case "host-bypass": {
+      const h = el.dataset.host, label = hostLabel(h);
+      const ids = hostBypassIds(h);
+      if (ids.length) return act(Promise.all(ids.map((g) => api("DELETE", `/api/grants/${g}`))), `${label} bypass off`);
+      return openSheet({ kind: "push", html: `<h2>Bypass ${esc(label)}</h2><p class="lead">Every command there runs without asking. Policy denies and lockdown still apply.</p>
+        <div class="chips">${[[15, "15 min"], [60, "1 hour"], [240, "4 hours"], [0, "Until I turn it off"]].map(([m, l]) => `<button data-action="host-bypass-on" data-host="${esc(h)}" data-min="${m}">${l}</button>`).join("")}</div>
         <div class="sheet-actions"><button class="btn btn-ghost" data-action="close">Cancel</button></div>` });
     }
-    case "mac-bypass-on":
-      if (await act(api("POST", "/api/grants", { target: "mac", session: "*", profile: "*", credentials: "*", minutes: Number(el.dataset.min) || null, note: "Mac bypass" }), "Mac bypass on")) closeSheet();
-      return;
-    case "mac-allow-add": {
-      const inp = $("#mac-pattern"); const pattern = inp.value.trim();
-      if (!pattern) return;
-      if (await act(api("POST", "/api/mac/allow", { pattern }), `Always allowed on your Mac: ${pattern}`)) inp.value = "";
+    case "host-bypass-on": {
+      const h = el.dataset.host;
+      if (await act(api("POST", "/api/grants", { target: h, session: "*", profile: "*", credentials: "*", minutes: Number(el.dataset.min) || null, note: `${hostLabel(h)} bypass` }), `${hostLabel(h)} bypass on`)) closeSheet();
       return;
     }
-    case "mac-allow-remove": return act(api("DELETE", "/api/mac/allow", { pattern: el.dataset.p }), "Removed from the Mac allow list");
+    case "host-allow-add": {
+      const h = el.dataset.host;
+      const inp = document.getElementById(`host-pattern-${h}`); const pattern = inp.value.trim();
+      if (!pattern) return;
+      if (await act(api("POST", `/api/hosts/${encodeURIComponent(h)}/allow`, { pattern }), `Always allowed on ${hostLabel(h)}: ${pattern}`)) inp.value = "";
+      return;
+    }
+    case "host-allow-remove": return act(api("DELETE", `/api/hosts/${encodeURIComponent(el.dataset.host)}/allow`, { pattern: el.dataset.p }), `Removed from the ${hostLabel(el.dataset.host)} allow list`);
     case "ed-submit": return submitEditor();
     case "mcp-new":
       return openSheet({ kind: "push", html: formSheet("Connect an MCP server", "Starts an OAuth sign-in. The link appears here and on Approvals.",

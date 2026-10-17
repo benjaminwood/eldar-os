@@ -144,7 +144,7 @@ func (m *model) hints() []hint {
 	case tabActivity:
 		return []hint{{"enter", "details"}, {"f", "filter"}, {"/", "search"}, {"esc", "clear search"}, {"r", "refresh"}, {"?", "help"}}
 	default:
-		return []hint{{"y", "copy sign-in link"}, {"n", "connect MCP"}, {"v", "paste redirect"}, {"c", "allow cron"}, {"t", "test Mac"}, {"b", "Mac bypass"}, {"a", "Mac allow"}, {"x", "remove"}}
+		return []hint{{"y", "copy sign-in link"}, {"n", "connect MCP"}, {"v", "paste redirect"}, {"c", "allow cron"}, {"t", "test host"}, {"b", "host bypass"}, {"a", "host allow"}, {"x", "remove"}}
 	}
 }
 
@@ -218,7 +218,7 @@ func (m *model) helpView() string {
 		{"enter / click", "full details + output"}, {"f", "filter"}, {"/", "search"},
 	}) + "\n" + sec("Settings", [][2]string{
 		{"y", "copy MCP sign-in link"}, {"n", "connect an MCP server"}, {"v", "paste a sign-in redirect"},
-		{"c", "allow a cron"}, {"X", "clear all cached credentials"}, {"t", "test the Mac"}, {"b", "Mac bypass on/off"}, {"a", "always allow on Mac"}, {"x", "remove"},
+		{"c", "allow a cron"}, {"X", "clear all cached credentials"}, {"t", "test the selected host"}, {"b", "its bypass on/off"}, {"a", "always allow there"}, {"x", "remove"},
 	}) + "\n" + sec("Mouse", [][2]string{
 		{"click", "tabs, rows, buttons, mode badge"}, {"wheel", "move / scroll"},
 	})

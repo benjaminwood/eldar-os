@@ -59,7 +59,7 @@ func kindColor(kind, target string) string {
 	if kind == "browser" {
 		return t.Orange
 	}
-	if target == "mac" {
+	if target != "" && target != "eldar" && target != "browser" { // a remote host
 		return t.Lavender
 	}
 	if kind == "grant_request" {
@@ -80,7 +80,7 @@ func (m *model) pendingRow(p api.Pending, w int) string {
 
 	secs := time.UnixMilli(p.ExpiresAt).Sub(m.now).Seconds()
 	left := lipgloss.NewStyle().Foreground(c(urgency(secs))).Render(view.Remaining(p.ExpiresAt, m.now))
-	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Render(view.KindLabelFor(p.Kind, p.Target))
+	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Render(view.KindLabelFor(p.Kind, p.Target, p.Host))
 	head := box + " " + sBold.Render("#"+id) + " " + kind
 	head += strings.Repeat(" ", max(1, w-3-lipgloss.Width(head)-lipgloss.Width(left))) + left
 
@@ -132,7 +132,7 @@ func (m *model) pendingDetail(w, h int) string {
 	total := float64(p.ExpiresAt-p.CreatedAt) / 1000
 	color := urgency(secsLeft)
 
-	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Bold(true).Render(view.KindLabelFor(p.Kind, p.Target))
+	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Bold(true).Render(view.KindLabelFor(p.Kind, p.Target, p.Host))
 	head := sBold.Render(fmt.Sprintf("#%d", p.ID)) + "  " + kind
 	exp := lipgloss.NewStyle().Foreground(c(color)).Render("expires in " + view.Remaining(p.ExpiresAt, m.now))
 	head += strings.Repeat(" ", max(1, inner-lipgloss.Width(head)-lipgloss.Width(exp))) + exp
@@ -157,13 +157,16 @@ func (m *model) pendingDetail(w, h int) string {
 		sess += "  " + sFaint.Render(view.Short(p.SessionID))
 	}
 	field("Session", sess)
-	if p.Target == "mac" {
+	if p.Kind == "exec" && p.Target != "" && p.Target != "eldar" {
 		field("Runs on", sLav.Bold(true).Render(p.Host))
 	}
 	if g := p.Grant; p.Kind == "grant_request" && g != nil {
-		where := map[string]string{"mac": "your Mac (commands)", "browser": "Arc on your Mac"}[g.Target]
-		if where == "" {
-			where = "Eldar (commands in the container)"
+		where := "Eldar (commands in its VM)"
+		switch {
+		case g.Target == "browser":
+			where = "browser windows"
+		case g.Target != "" && g.Target != "eldar":
+			where = m.hostLabel(g.Target) + " (commands)"
 		}
 		field("Covers", sBright.Render(where))
 		any := func(c api.Creds, all, none string, label func(string) string) string {
@@ -193,7 +196,7 @@ func (m *model) pendingDetail(w, h int) string {
 			}
 			field("Profile", sLav.Render(prof))
 			field("Creds", any(g.Credentials, "ANY credentials", "none", same))
-			if g.Target != "mac" {
+			if g.Target == "eldar" || g.Target == "" {
 				aws := any(g.Aws, "ANY AWS role", "no AWS", view.AwsLabel)
 				for _, a := range g.Aws.Names {
 					if view.AwsRisky(a) {
@@ -240,7 +243,7 @@ func (m *model) pendingDetail(w, h int) string {
 	}
 	field("Cwd", sDim.Render(strings.Replace(p.Cwd, "/home/eldar/", "~/", 1)))
 	if p.AllowAlways != "" {
-		field("Always", sDim.Render("A adds “"+p.AllowAlways+"” to the Mac allow list"))
+		field("Always", sDim.Render("A adds “"+p.AllowAlways+"” to the "+p.Host+" allow list"))
 	}
 	if p.Channel == "tmux" {
 		field("Also on", sDim.Render("tmux popup in the caller's pane"))
