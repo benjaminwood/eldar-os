@@ -33,7 +33,8 @@ they share). Nix: `modules/supervisor.nix`, configured in
 | Credentials config | sops secret `supervisor-env`: `OP_ACCOUNT_*_TOKEN`, `OP_PROFILE_*_ACCOUNT`, `OP_PROFILE_*_ENV` |
 
 Develop: `scripts/go test ./...`, then `scripts/try` (the Nix build runs the
-tests too).
+tests too). After a UI change, `scripts/screenshots` refreshes the README's
+screenshots from made-up data (`docs/screenshots.md`).
 
 ## Agents' client: the MCP server
 

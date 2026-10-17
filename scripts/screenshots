@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Screenshots of the supervisor's web UI and TUI for the README, from made-up
+# data (supervisor/cmd/demo-admin): never anyone's real sessions, approvals or
+# chat. Writes docs/screenshots/*.png.
+#
+#   scripts/screenshots
+#
+# Needs docker and tmux. The web UI runs in its loopback development mode
+# against the demo admin socket; the TUI runs in a detached tmux, and each
+# screen is replayed into xterm.js (the copy the web UI vendors). Both are shot
+# with Playwright (headless Chromium).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+PLAYWRIGHT=mcr.microsoft.com/playwright/python@sha256:a7f6cf3ae520c9d670ad956572c13747ed5abdbba5123a01526f873ed1662528 # v1.56.0-noble
+OUT=$PWD/docs/screenshots
+PORT=18090
+
+work=$(mktemp -d)
+sock=${XDG_RUNTIME_DIR:-/tmp}/eldar-demo-$$.sock # unix socket paths must be short
+tmux_session=eldar-demo-$$
+cleanup() {
+  tmux kill-session -t "$tmux_session" 2>/dev/null || true
+  [ -n "${pids:-}" ] && kill $pids 2>/dev/null || true
+  rm -rf "$work" "$sock"
+}
+trap cleanup EXIT
+
+echo "building…"
+scripts/go build -o /src/.screenshots-bin/ ./cmd/demo-admin ./cmd/supervisor
+mv supervisor/.screenshots-bin/* "$work/" && rmdir supervisor/.screenshots-bin
+
+if curl -s -o /dev/null http://127.0.0.1:$PORT/; then
+  echo "something is already listening on 127.0.0.1:$PORT (a leftover run?)" >&2; exit 1
+fi
+"$work/demo-admin" "$sock" >"$work/demo.log" 2>&1 & pids=$!
+for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
+mkdir -p "$work/web-state"
+"$work/supervisor" web --dev-listen 127.0.0.1:$PORT --socket "$sock" --allow-user demo@example.com \
+  --state "$work/web-state" >"$work/web.log" 2>&1 & pids="$pids $!"
+for _ in $(seq 50); do curl -sf -o /dev/null http://127.0.0.1:$PORT/ && break; sleep 0.1; done
+mkdir -p "$OUT"
+
+echo "TUI…"
+tmux new-session -d -s "$tmux_session" -x 120 -y 34 \
+  "TERM=xterm-256color COLORTERM=truecolor $work/supervisor --socket $sock"
+sleep 3
+for shot in "1 approvals" "2 sessions" "5 activity"; do
+  set -- $shot
+  tmux send-keys -t "$tmux_session" "$1"
+  sleep 1.5
+  tmux capture-pane -t "$tmux_session" -e -p >"$work/tui-$2.ansi"
+done
+cp supervisor/web/static/vendor/{xterm.js,xterm.css,addon-unicode11.js} "$work/"
+cat >"$work/tui.html" <<'EOF'
+<!doctype html><meta charset="utf-8">
+<style>
+  /* The full font: Google Fonts' subset has no box drawing, which then falls back to a narrower font. */
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url(https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/fonts/webfonts/JetBrainsMono-Regular.woff2); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url(https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/fonts/webfonts/JetBrainsMono-Bold.woff2); }
+</style>
+<link rel="stylesheet" href="xterm.css">
+<style>
+  body { margin: 0; padding: 24px; background: transparent; display: inline-block; }
+  .win { background: #1a1b26; border-radius: 10px; padding: 14px 18px 18px; box-shadow: 0 10px 30px #0006; display: inline-block; }
+  .dots { display: flex; gap: 8px; margin-bottom: 12px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; }
+</style>
+<div class="win"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div id="t"></div></div>
+<script src="xterm.js"></script><script src="addon-unicode11.js"></script>
+EOF
+
+echo "shooting…"
+cat >"$work/shoot.py" <<'EOF'
+import sys
+from playwright.sync_api import sync_playwright
+url, out = sys.argv[1], sys.argv[2]
+phone, desktop = ((390, 844), 3), ((1280, 820), 2)
+shots = [("web-approvals", "approvals", phone), ("web-sessions", "sessions", phone),
+         ("web-chat", "chat", phone), ("web-desktop", "approvals", desktop)]
+with sync_playwright() as p:
+    b = p.chromium.launch()
+    for name, tab, ((w, h), dpr) in shots:
+        pg = b.new_page(viewport={"width": w, "height": h}, device_scale_factor=dpr, color_scheme="dark")
+        pg.goto(url)
+        pg.wait_for_selector("#tabs button", timeout=15000)
+        pg.wait_for_timeout(1500)
+        pg.locator(f'#tabs button[data-tab="{tab}"]').first.click()
+        pg.wait_for_timeout(1500)
+        pg.screenshot(path=f"{out}/{name}.png")
+        pg.close()
+    pg = b.new_page(device_scale_factor=2)
+    pg.goto("file:///work/tui.html", wait_until="networkidle")
+    # xterm.js measures its cell once: the web font must be in before it opens.
+    if not pg.evaluate("Promise.all([document.fonts.load('15px \"JetBrains Mono\"'), document.fonts.load('bold 15px \"JetBrains Mono\"')]).then(f => f.every(x => x.length > 0))"):
+        sys.exit("JetBrains Mono didn't load")
+    for name in ("approvals", "sessions", "activity"):
+        ansi = open(f"/work/tui-{name}.ansi").read().rstrip("\n").replace("\n", "\r\n")
+        pg.evaluate("""a => new Promise(done => {
+            const el = document.getElementById('t'); el.innerHTML = '';
+            const t = new Terminal({cols: 120, rows: 34, fontSize: 15, fontFamily: "'JetBrains Mono', monospace",
+              allowProposedApi: true, theme: {background: '#1a1b26', foreground: '#c0caf5'}});
+            t.loadAddon(new Unicode11Addon.Unicode11Addon()); t.unicode.activeVersion = '11';
+            t.open(el); t.write(a, done); })""", ansi)
+        pg.wait_for_timeout(500)
+        pg.locator(".win").screenshot(path=f"{out}/tui-{name}.png", omit_background=True)
+    pg.close()
+    b.close()
+EOF
+docker run --rm --network host -v "$work:/work" -v "$OUT:/out" "$PLAYWRIGHT" sh -c \
+  "pip install -q --break-system-packages playwright==1.56.0 >/dev/null 2>&1 && python3 /work/shoot.py http://127.0.0.1:$PORT/ /out && chmod 644 /out/*.png && chown $(id -u):$(id -g) /out/*.png"
+
+ls -1 "$OUT"

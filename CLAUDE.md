@@ -74,6 +74,11 @@ may push to staging `main` directly; commits are signed with
   keyfiles, tokens) is backed up right away to the admin's 1Password vault,
   with a note on what it is, where it lives and how to replace it. Values go
   through pipes, never into output or argv.
+- Showing the work is part of publishing it. When a change alters what the
+  TUI or web UI looks like, extend the demo data if needed
+  (`supervisor/cmd/demo-admin`), run `scripts/screenshots`, check the images,
+  and commit them with the change (`docs/screenshots.md`). The README's
+  feature list and diagram should keep up with what the system does.
 - Disks are referred to by serial, never `/dev/nvmeXn1` (the names have swapped
   between boots on this machine).
 - Test against the dry-run VM (`scripts/vm --dry-run …`) before the real disk.

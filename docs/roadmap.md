@@ -21,6 +21,8 @@ Checked items are done; the order of sections is roughly the order of work.
 - [x] herdr in Eldar's VM; supervisor herdr control and live terminals
 - [x] Eldar's primary session (watchdog) with chat
 - [x] Eldar's VM updated in place, never restarted for software (0010)
+- [x] README with screenshots of both UIs, generated from made-up data
+      (`scripts/screenshots`, `docs/screenshots.md`)
 
 ## 1. Eldar improves its own system (PR → approve → apply)
 
