@@ -156,6 +156,58 @@ The admin host needs an age key at `~/.config/sops/age/keys.txt`
 (`age-keygen -o`, backed up in 1Password) and a commit-signing key whose
 public half is in `trust/allowed_signers`.
 
+## 9. GitHub: Eldar's App, the ruleset and webhooks
+
+Eldar works on GitHub as its own GitHub App, which can open PRs but not
+merge (decision 0011). GitHub only creates Apps in the browser, signed in as
+the repo owner (Settings → Developer settings → GitHub Apps → New, i.e.
+https://github.com/settings/apps/new):
+
+| Setting | Value |
+|---|---|
+| Name | `eldar-os-agent-<owner>` (globally unique) |
+| Homepage URL | the public repo |
+| Webhook | off (uncheck Active) |
+| OAuth during installation, Device Flow | off |
+| Repository permissions | Contents: read and write; Pull requests: read and write; Actions, Checks, Commit statuses: read-only; Metadata: read-only (required). Nothing else: in particular not Workflows or Administration |
+| Organization / account permissions, events | none |
+| Where it can be installed | only on this account |
+
+Then:
+
+1. **Generate a private key** (it downloads a `.pem`). Put it in the secrets
+   repo without displaying it, `jq -Rs . < key.pem | sops set --value-stdin
+   eldar-os.yaml '["github-app-key"]'`, back it up to 1Password as a
+   Document, and delete the download.
+2. **Install App** → only select repositories → the staging repo. The
+   installation ID is the number at the end of the page's URL.
+3. Add to the sops secret `supervisor-env`: `SUPERVISOR_GITHUB_APP_ID`,
+   `SUPERVISOR_GITHUB_INSTALLATION_ID` and `SUPERVISOR_GITHUB_REPOS` (the
+   staging repo's name). Commit the secrets repo; the next apply picks it up.
+4. Generate the apply webhook secret into sops (`openssl rand -hex 32 | tr -d
+   '\n' | jq -Rs . | sops set --value-stdin eldar-os.yaml
+   '["apply-webhook-secret"]'`) and back it up to 1Password.
+5. `scripts/github-setup` applies the rest, idempotently: the ruleset on
+   `main` (only admins update it), rebase-merge off, and both repos' push
+   webhooks to the machine (decision 0012). `scripts/github-setup --check`
+   reports drift without changing anything.
+
+## 10. Tailnet nodes
+
+The supervisor's web UI and the apply webhook receiver each join the tailnet
+as their own node. In the tailnet policy (download it first; change only
+these entries): owners for `tag:eldar-proxy` and `tag:eldar-os-hook`, and the
+`funnel` node attribute for `tag:eldar-os-hook` (public HTTPS, no ACL rules,
+so no tailnet access). Then give each a single-use auth key for its tag,
+written as the service's user:
+
+| Node | Tag | Auth key goes in |
+|---|---|---|
+| web UI (`supervisor-web`) | `tag:eldar-proxy` | `/var/lib/supervisor-web/authkey` |
+| webhooks (`eldar-os-apply-hook`) | `tag:eldar-os-hook` | `/var/lib/eldar-os-hook/authkey` |
+
+Restart the service; it registers and deletes the key.
+
 ## Changing the system
 
 ```bash
