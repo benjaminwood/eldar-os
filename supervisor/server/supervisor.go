@@ -44,6 +44,7 @@ type Config struct {
 	ChatWorkspace, ChatTab    string // where Eldar, the chief-of-staff session, lives in herdr
 	ChatPath, ChatStatePath   string
 	RelayPath, RelayStatePath string
+	WatchesPath               string
 	TerminalSSH               TerminalSSH // live terminals into the VM
 	GitHub                    *GitHubApp  // Eldar's GitHub App; nil = none
 }
@@ -66,6 +67,7 @@ type Supervisor struct {
 	chatPins  KeyPins
 	relay     *Relay
 	relayPins KeyPins
+	watches   *Watches
 	termSSH   TerminalSSH
 	runner    interface {
 		Runner
@@ -104,6 +106,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		termSSH:        cfg.TerminalSSH,
 		chat:           NewChat(cfg.ChatPath, cfg.ChatStatePath, n),
 		relay:          NewRelay(cfg.RelayPath, cfg.RelayStatePath),
+		watches:        NewWatches(cfg.WatchesPath),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil

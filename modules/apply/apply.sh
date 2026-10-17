@@ -25,6 +25,25 @@ if [ "${1:-}" != --force ] && [ "$(cat "$STATE_DIR/applied" 2>/dev/null)" = "$re
   exit 0
 fi
 
+# Tell the supervisor how this apply ended, so sessions waiting on a PR in it
+# hear right away (docs/decisions/0012-cycle-time.md). Best effort: the
+# supervisor may be restarting as part of this apply, so wait for its socket.
+why="apply failed"
+report() { # outcome detail
+  local sock=${SUPERVISOR_SOCKET:-/run/supervisor/admin.sock}
+  for _ in $(seq 60); do [ -S "$sock" ] && break; sleep 0.5; done
+  [ -S "$sock" ] || return 0
+  jq -n --arg rev "$rev" --arg outcome "$1" --arg detail "$2" '{$rev, $outcome, $detail}' \
+    | curl -s -m 10 --retry 5 --retry-connrefused --retry-delay 1 --unix-socket "$sock" \
+        -H 'Content-Type: application/json' --data-binary @- http://supervisor/admin/applied >/dev/null || true
+}
+finish() {
+  local status=$?
+  rm -rf "${GNUPGHOME:-}"
+  [ "$status" = 0 ] || report failed "$why"
+}
+trap finish EXIT
+
 # Every commit main gained since the last apply, along its first-parent
 # chain, must be signed by an allowed key: Ben's merges on GitHub (web-flow)
 # and the admin's pushes. A PR's own commits come in as a merge's second
@@ -33,12 +52,12 @@ fi
 # the range starts where the old and new histories meet.
 GNUPGHOME=$(mktemp -d)
 export GNUPGHOME
-trap 'rm -rf "$GNUPGHOME"' EXIT
 gpg --quiet --import "$GPG_KEYS" 2>/dev/null
 applied_rev=$(cut -d' ' -f1 "$STATE_DIR/applied" 2>/dev/null || true)
 base=$(git -C "$SRC" merge-base "$applied_rev" "$rev" 2>/dev/null || true)
 for c in $rev $([ -n "$base" ] && git -C "$SRC" rev-list --first-parent "$base..$rev"); do
   if ! git -C "$SRC" -c gpg.ssh.allowedSignersFile="$ALLOWED_SIGNERS" verify-commit "$c" 2>/dev/null; then
+    why="refused: ${c:0:12} on main isn't signed by an allowed key"
     log "REFUSING ${rev:0:12}: ${c:0:12} ($(git -C "$SRC" log -1 --format=%s "$c")) on main isn't signed by an allowed key"
     exit 1
   fi
@@ -49,6 +68,7 @@ git -C "$SRC" checkout -q --force --detach "$rev"
 git -C "$SECRETS" checkout -q --force --detach "$secrets_rev"
 
 log "building"
+why="the build failed (nothing was activated)"
 new=$(nix --extra-experimental-features 'nix-command flakes' build --no-link --print-out-paths \
   "$SRC#nixosConfigurations.$FLAKE_ATTR.config.system.build.toplevel")
 prev=$(readlink -f /nix/var/nix/profiles/system)
@@ -61,6 +81,7 @@ systemd-run --quiet --collect --unit=eldar-os-rollback --on-active="$ROLLBACK_AF
   "$prev/bin/switch-to-configuration" test
 
 rollback() {
+  why="rolled back to the previous system: $*"
   log "ROLLING BACK to $prev: $*"
   systemctl stop eldar-os-rollback.timer 2>/dev/null || true
   "$prev/bin/switch-to-configuration" test || true
@@ -84,3 +105,4 @@ nix-env -p /nix/var/nix/profiles/system --set "$new"
 "$new/bin/switch-to-configuration" boot
 echo "$rev $secrets_rev" > "$STATE_DIR/applied"
 log "applied ${rev:0:12} (secrets ${secrets_rev:0:12})"
+report applied ""

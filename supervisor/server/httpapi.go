@@ -146,6 +146,7 @@ func (s *Supervisor) agentHandler() http.Handler {
 		sendJSON(w, 200, map[string]any{"count": len(entries), "limit": limit, "entries": entries})
 	})
 	mux.HandleFunc("GET /github/token", s.handleGitHubToken)
+	mux.HandleFunc("POST /watch-pr", s.handleWatchPR)
 	s.chatRoutes(mux)
 	s.relayRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

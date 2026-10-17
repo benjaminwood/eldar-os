@@ -251,6 +251,21 @@ func (s *server) toolList() []tool {
 			run: s.grantTool,
 		},
 		{
+			Name: "supervisor_watch_pr",
+			Description: "Call this right after you open a pull request on the eldar-os staging repo (a change to " +
+				"this machine or this VM). Ben approves it by merging; the machine applies it within seconds. When " +
+				"it's applied (or the apply fails, or the PR is closed unmerged), a message starting \"[eldar-os]\" " +
+				"arrives in this session as your next prompt. Don't poll or wait in a loop: carry on, or stop " +
+				"and wait for that message.",
+			Schema: func([]string, string) map[string]any {
+				return object(map[string]any{
+					"pr":   map[string]any{"type": "number", "description": "The pull request number."},
+					"repo": map[string]any{"type": "string", "description": "Repo name; defaults to the staging repo."},
+				}, "pr")
+			},
+			run: s.watchPRTool,
+		},
+		{
 			Name:        "notify_ben",
 			Description: notifyDescription,
 			Schema: func([]string, string) map[string]any {
@@ -442,4 +457,29 @@ func (s *server) grantTool(ctx context.Context, args map[string]any) map[string]
 		line += " Expires " + time.UnixMilli(int64(exp)).UTC().Format(time.RFC3339) + "."
 	}
 	return textResult(line)
+}
+
+func (s *server) watchPRTool(ctx context.Context, args map[string]any) map[string]any {
+	pr, _ := args["pr"].(float64)
+	if pr < 1 || pr != math.Trunc(pr) {
+		return errorText("pr must be the pull request's number.")
+	}
+	if s.c.sessionID == "" {
+		return errorText("This session has no CLAUDE_CODE_SESSION_ID, so there's nothing to notify.")
+	}
+	payload := map[string]any{"pr": int(pr), "repo": str(args, "repo"), "paneId": os.Getenv("HERDR_PANE_ID")}
+	s.session(payload)
+	data, err := s.c.post(ctx, "/watch-pr", payload, 40*time.Second)
+	if err != nil {
+		return unreachable(err)
+	}
+	if _, ok := data["error"]; ok {
+		return failure(data)
+	}
+	note := ""
+	if os.Getenv("HERDR_PANE_ID") == "" {
+		note = " This session isn't in a herdr pane, so the notice will go to Eldar instead."
+	}
+	return textResult(fmt.Sprintf("Watching %v#%v (%v). You'll get an [eldar-os] message here when it's applied.%s",
+		data["repo"], data["pr"], data["title"], note))
 }

@@ -25,6 +25,10 @@ What carries it out today:
   in it is trusted or used, and the apply fetches from GitHub and verifies
   signatures itself (0005). Both the staging and secrets repos send them. The
   2-minute timer stays as the fallback for a missed delivery.
+- **The session that proposed a change is told when it's live.** It registers
+  its PR with the supervisor; when an apply containing the merge finishes, the
+  supervisor types a notice into that session (or tells it the apply failed),
+  so no agent polls or waits on a guess.
 - **No CI on pull requests.** The machine builds before it applies and changes
   nothing if the build fails, so a PR build only delays the merge. CI builds
   `main` and runs the install end to end.

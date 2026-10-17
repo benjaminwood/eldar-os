@@ -18,7 +18,7 @@ let
 
   apply = pkgs.writeShellApplication {
     name = "eldar-os-apply";
-    runtimeInputs = with pkgs; [ bash git openssh gnupg config.nix.package coreutils systemd gnugrep ];
+    runtimeInputs = with pkgs; [ bash git openssh gnupg config.nix.package coreutils systemd gnugrep jq curl ];
     text = builtins.readFile ./apply.sh;
   };
 in

@@ -75,6 +75,17 @@ it expires. No approval; each new token is audited. In the VM, git uses it
 through `supervisor git-credential` (system git config) and gh through
 `GH_TOKEN=$(supervisor github-token)`. Why: `docs/decisions/0011-eldar-github-app.md`.
 
+## Telling a session its PR is live
+
+A session that opens a PR on the staging repo calls `supervisor_watch_pr`
+(`POST /watch-pr`; saved in `watches.json`). Each apply ends by reporting its
+revision and outcome on the admin socket (`POST /admin/applied`, from the apply
+service as root). The supervisor then asks GitHub, as the App, whether each
+watched PR is merged and its merge commit is in that revision, and types an
+`[eldar-os] …` notice into the session's herdr pane: applied, the apply failed
+(once per revision; the watch stays for the next apply), or closed unmerged.
+If the session is gone, the notice goes to Eldar through the relay.
+
 ## herdr and live terminals
 
 herdr runs in Eldar's VM as `eldar` (a user service, with a `primary`

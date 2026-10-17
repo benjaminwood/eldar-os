@@ -63,6 +63,7 @@ func runServe(args []string) {
 		ChatStatePath:         state + "/chat-state.json",
 		RelayPath:             state + "/relay.jsonl",
 		RelayStatePath:        state + "/relay-state.json",
+		WatchesPath:           state + "/watches.json",
 	}
 	runner := &server.SSHRunner{
 		Host:        env("SUPERVISOR_AGENT_HOST", "10.42.0.2"),

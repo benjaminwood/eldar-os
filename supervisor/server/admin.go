@@ -122,6 +122,8 @@ var notYet = map[string]string{
 func (s *Supervisor) adminHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /admin/state", func(w http.ResponseWriter, r *http.Request) { sendJSON(w, 200, s.Snapshot()) })
+	// From the apply service (root): an apply finished; tell sessions whose PRs it contains.
+	mux.HandleFunc("POST /admin/applied", s.handleApplied)
 
 	// Server-sent snapshots: one on connect, one per burst of changes
 	// (debounced), and every 5 seconds as a heartbeat.

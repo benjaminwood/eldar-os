@@ -79,6 +79,7 @@ Checked items are done; the order of sections is roughly the order of work.
 
 - [x] Applies start on a GitHub webhook (Tailscale Funnel), timer as fallback
 - [x] No CI on pull requests
+- [x] The session that opened a PR is told when it's applied (or failed)
 
 ## Housekeeping
 
