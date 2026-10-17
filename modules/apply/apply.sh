@@ -20,11 +20,6 @@ fetch "$SECRETS" "$SECRETS_REPO" "$KEYS/secrets"
 rev=$(git -C "$SRC" rev-parse origin/main)
 secrets_rev=$(git -C "$SECRETS" rev-parse origin/main)
 
-if [ "${1:-}" != --force ] && [ "$(cat "$STATE_DIR/applied" 2>/dev/null)" = "$rev $secrets_rev" ]; then
-  log "up to date at ${rev:0:12}"
-  exit 0
-fi
-
 # Tell the supervisor how this apply ended, so sessions waiting on a PR in it
 # hear right away (docs/decisions/0012-cycle-time.md). Best effort: the
 # supervisor may be restarting as part of this apply, so wait for its socket.
@@ -43,6 +38,16 @@ finish() {
   [ "$status" = 0 ] || report failed "$why"
 }
 trap finish EXIT
+
+if [ "${1:-}" != --force ] && [ "$(cat "$STATE_DIR/applied" 2>/dev/null)" = "$rev $secrets_rev" ]; then
+  log "up to date at ${rev:0:12}"
+  # Still tell the supervisor: a webhook for a PR closed without merging
+  # lands here, and that PR's session should hear about it.
+  trap - EXIT
+  report applied ""
+  exit 0
+fi
+
 
 # Every commit main gained since the last apply, along its first-parent
 # chain, must be signed by an allowed key: Ben's merges on GitHub (web-flow)

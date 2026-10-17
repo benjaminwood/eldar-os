@@ -9,7 +9,8 @@
 #     so Eldar's GitHub App can open PRs but never merge or push there
 #   - rebase-merge off: merges and squashes are signed by GitHub (web-flow)
 # Both repos (docs/decisions/0012-cycle-time.md):
-#   - push webhook to the machine's apply-hook, signed with the secret in
+#   - push and pull_request webhook to the machine's apply-hook (a closed PR
+#     is reported to its session at once), signed with the secret in
 #     sops (apply-webhook-secret), read from the secrets repo checkout
 #
 # Not scriptable: creating Eldar's GitHub App and installing it on the
@@ -61,15 +62,15 @@ else gh api -X POST "repos/$STAGING/rulesets" --input - --jq '"  created ruleset
 # never in argv.
 hook_body() {
   "$SOPS" decrypt --extract '["apply-webhook-secret"]' "$SECRETS_CHECKOUT/eldar-os.yaml" \
-    | jq -Rs --arg url "$HOOK_URL" '{active: true, events: ["push"],
+    | jq -Rs --arg url "$HOOK_URL" '{active: true, events: ["push", "pull_request"],
         config: {url: $url, content_type: "json", insecure_ssl: "0", secret: .}}'
 }
 for repo in "$STAGING" "$SECRETS"; do
   echo "== $repo: webhook to apply-hook"
   id=$(gh api "repos/$repo/hooks" --jq ".[] | select(.config.url == \"$HOOK_URL\") | .id")
   if [ -n "$id" ]; then
-    state=$(gh api "repos/$repo/hooks/$id" --jq '"\(.active) \(.events | join(",")) \(.config.content_type) \(.config.insecure_ssl) \(.config.secret != null)"')
-    if [ "$state" = "true push json 0 true" ]; then
+    state=$(gh api "repos/$repo/hooks/$id" --jq '"\(.active) \(.events | sort | join(",")) \(.config.content_type) \(.config.insecure_ssl) \(.config.secret != null)"')
+    if [ "$state" = "true pull_request,push json 0 true" ]; then
       note "hook $id as expected (the secret itself can't be read back; re-run without --check to reset it)"
       $check || { hook_body | gh api -X PATCH "repos/$repo/hooks/$id" --input - --silent && note "secret re-set"; }
     elif $check; then differs "hook $id: $state"
