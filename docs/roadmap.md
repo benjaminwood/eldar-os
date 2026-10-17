@@ -60,11 +60,14 @@ jobs. Done last.
 - [x] `relay` channel: other agents reach Ben through Eldar (`notify_ben`)
 - [x] Commands on other hosts (configured privately), Ben's Mac first
 - [ ] The UIs list every host, not just the Mac
-- [ ] Arc on Ben's Mac; the patched Playwright extension gets its own public
-      repo (checked for secrets first)
+- [x] Browsers on other hosts, Arc on Ben's Mac first; the bridge and patched
+      extension are public: github.com/benjaminwood/arc-playwright-bridge
+- [ ] Reload the patched extension in Arc from the bridge's checkout (it's
+      still loaded from the legacy folder), then drop the legacy paths
 - [ ] Approval nudges in herdr
 - [ ] AWS credentials (needs a fresh SSO sign-in for the supervisor)
-- [ ] MCP OAuth (needs fresh sign-ins)
+- [ ] ~~MCP OAuth~~: not porting for now. Cron auto-approval stays unused (the
+      code exists; no crons are authorized)
 - [ ] A replacement for `suben` / the secrets-dump socket
 - [ ] Forwarder for Claude's own API credentials (later: per-request policy)
 

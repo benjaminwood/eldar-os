@@ -37,13 +37,14 @@ var validHostName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 // RemoteHost is one configured host.
 type RemoteHost struct {
-	Name        string `json:"name"`        // request target, e.g. "mac"
-	Label       string `json:"label"`       // for Ben, e.g. "Ben's Mac"
-	Description string `json:"description"` // for agents: what it is, what to use it for
-	Target      string `json:"target"`      // user@host for ssh
-	Shell       string `json:"shell"`       // e.g. "/bin/zsh -l -s"; default "bash -l -s"
-	KeyPath     string `json:"-"`
-	KnownHosts  string `json:"-"`
+	Name        string       `json:"name"`              // request target, e.g. "mac"
+	Label       string       `json:"label"`             // for Ben, e.g. "Ben's Mac"
+	Description string       `json:"description"`       // for agents: what it is, what to use it for
+	Target      string       `json:"target"`            // user@host for ssh
+	Shell       string       `json:"shell"`             // e.g. "/bin/zsh -l -s"; default "bash -l -s"
+	Browser     *HostBrowser `json:"browser,omitempty"` // a browser agents can drive there (browser.go)
+	KeyPath     string       `json:"-"`
+	KnownHosts  string       `json:"-"`
 
 	mu       sync.Mutex
 	lastTest *api.MacTest
@@ -54,6 +55,7 @@ type RemoteHost struct {
 type hostsFile []struct {
 	Name, Label, Description, Target, Shell string
 	HostKey                                 string `json:"hostKey"`
+	Browser                                 *HostBrowser
 }
 
 // LoadHosts reads hosts.json; each host's key is keyDir/<name> (missing key =
@@ -86,8 +88,11 @@ func LoadHosts(path, keyDir, stateDir string) (map[string]*RemoteHost, error) {
 		if err := os.WriteFile(kh, []byte(addr+" "+strings.TrimSpace(h.HostKey)+"\n"), 0o600); err != nil {
 			return nil, err
 		}
+		if h.Browser != nil && (h.Browser.Bridge == "" || h.Browser.Name == "") {
+			return nil, fmt.Errorf("%s: host %s's browser needs name and bridge", path, h.Name)
+		}
 		rh := &RemoteHost{Name: h.Name, Label: h.Label, Description: h.Description, Target: h.Target, Shell: h.Shell,
-			KeyPath: keyDir + "/" + h.Name, KnownHosts: kh}
+			Browser: h.Browser, KeyPath: keyDir + "/" + h.Name, KnownHosts: kh}
 		if rh.Label == "" {
 			rh.Label = h.Name
 		}

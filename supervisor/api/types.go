@@ -231,6 +231,9 @@ type BrowserGrant struct {
 	// Profile is the Arc profile directory; ProfileName is how Ben knows it (its spaces).
 	Profile     string `json:"profile"`
 	ProfileName string `json:"profileName"`
+	Host        string `json:"host,omitempty"`   // the remote host whose browser it is
+	Device      string `json:"device,omitempty"` // that host's tailnet machine name
+	Space       string `json:"space,omitempty"`  // space new tabs open in
 	CreatedAt   int64  `json:"createdAt"`
 	ExpiresAt   int64  `json:"expiresAt"`
 	Channels    int    `json:"channels"`

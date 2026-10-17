@@ -4,6 +4,7 @@
 //	supervisor         Ben's TUI: approvals, sessions, grants, the global mode
 //	supervisor web     the web UI (on the tailnet, with mobile push)
 //	supervisor mcp     the MCP server agents in Eldar's VM use to reach it (stdio)
+//	supervisor browser MCP server: drive a browser profile on Ben's machines (stdio)
 //	supervisor channel chat|relay
 //	                   Eldar's channels: Ben's chat, and other agents' notify_ben events
 //	supervisor notify [--origin WHO] MESSAGE
@@ -52,6 +53,13 @@ func main() {
 		}
 		if err := mcp.RunChannel(os.Args[2], version); err != nil {
 			fmt.Fprintln(os.Stderr, "supervisor channel:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "browser" {
+		if err := mcp.RunBrowser(version); err != nil {
+			fmt.Fprintln(os.Stderr, "supervisor browser:", err)
 			os.Exit(1)
 		}
 		return

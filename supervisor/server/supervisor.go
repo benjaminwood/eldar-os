@@ -53,26 +53,28 @@ type Config struct {
 
 // Supervisor holds all state and serves both APIs.
 type Supervisor struct {
-	cfg       Config
-	n         *Notifier
-	policy    *Policy
-	modes     *Modes
-	sessions  *Sessions
-	grants    *Grants
-	approvals *Approvals
-	audit     *Audit
-	settings  *Settings
-	crons     *Crons
-	profiles  *Profiles
-	herdr     *Herdr
-	chat      *Chat
-	chatPins  KeyPins
-	relay     *Relay
-	relayPins KeyPins
-	watches   *Watches
-	hostAllow *HostAllow
-	termSSH   TerminalSSH
-	runner    interface {
+	cfg         Config
+	n           *Notifier
+	policy      *Policy
+	modes       *Modes
+	sessions    *Sessions
+	grants      *Grants
+	approvals   *Approvals
+	audit       *Audit
+	settings    *Settings
+	crons       *Crons
+	profiles    *Profiles
+	herdr       *Herdr
+	chat        *Chat
+	chatPins    KeyPins
+	relay       *Relay
+	relayPins   KeyPins
+	watches     *Watches
+	hostAllow   *HostAllow
+	browsers    *Browsers
+	browserPins KeyPins
+	termSSH     TerminalSSH
+	runner      interface {
 		Runner
 		ReadFile(ctx context.Context, path string) (string, error)
 	}
@@ -111,6 +113,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		relay:          NewRelay(cfg.RelayPath, cfg.RelayStatePath),
 		watches:        NewWatches(cfg.WatchesPath),
 		hostAllow:      NewHostAllow(cfg.HostAllowPath),
+		browsers:       NewBrowsers(),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil
@@ -124,6 +127,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		logf("op: %s", w)
 	}
 	logf("profiles: %v", s.profiles.Names())
+	go s.sweepBrowsers(ctx)
 
 	// The agent's port. Bound to the VM link only; IP_FREEBIND so the
 	// supervisor can start before the link is up.

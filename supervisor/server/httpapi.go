@@ -150,6 +150,7 @@ func (s *Supervisor) agentHandler() http.Handler {
 	mux.HandleFunc("POST /watch-pr", s.handleWatchPR)
 	s.chatRoutes(mux)
 	s.relayRoutes(mux)
+	s.browserRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, 404, map[string]any{"error": "Not found"})
 	})

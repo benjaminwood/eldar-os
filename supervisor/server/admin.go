@@ -35,14 +35,14 @@ func (s *Supervisor) Snapshot() api.State {
 		Profiles:      s.profiles.Names(),
 		Cache:         s.profiles.Cache(),
 		AwsProfiles:   []string{},
-		ArcProfiles:   []api.ArcProfile{},
+		ArcProfiles:   s.knownBrowserProfiles(),
 		Settings:      s.settings.Get(),
 		Chat:          chat,
 		MCP:           api.MCPSummary{Servers: []api.MCPServer{}, Pending: []api.MCPSignIn{}},
 		Herdr:         herdr,
 		Mac:           s.macStatus(),
 		Hosts:         s.hostStatuses(),
-		BrowserGrants: []api.BrowserGrant{},
+		BrowserGrants: s.browserGrants(),
 		Crons:         s.crons.List(),
 		Viewers:       s.n.Subscribers(),
 	}
@@ -83,7 +83,20 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 	switch {
 	case target == "eldar", s.isHost(target):
 	case target == "browser":
-		return api.GrantInput{}, "Arc grants aren't available on this supervisor yet"
+		arc, ok := parseScope(b.Arc, api.Creds{Names: []string{}})
+		if !ok || (!arc.Any && len(arc.Names) == 0) {
+			return api.GrantInput{}, `arc must be "*" or a non-empty list of browser profiles (host:profile)`
+		}
+		in := api.GrantInput{Target: "browser", Session: b.Session, Profile: "*", Credentials: api.Creds{Names: []string{}},
+			Aws: api.Creds{Names: []string{}}, Arc: arc, ArcNames: b.ArcNames, Note: truncRunes(b.Note, 200)}
+		if in.Session == "" {
+			in.Session = "*"
+		}
+		if b.Minutes != nil && *b.Minutes > 0 {
+			m := int(*b.Minutes)
+			in.Minutes = &m
+		}
+		return in, ""
 	default:
 		return api.GrantInput{}, "target must be eldar, browser or a configured host (" + strings.Join(s.hostNames(), ", ") + ")"
 	}
@@ -117,7 +130,7 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 }
 
 var notYet = map[string]string{
-	"/admin/mcp": "MCP sign-ins", "/admin/browser-grants": "Arc",
+	"/admin/mcp": "MCP sign-ins",
 }
 
 func (s *Supervisor) adminHandler() http.Handler {
@@ -125,6 +138,15 @@ func (s *Supervisor) adminHandler() http.Handler {
 	mux.HandleFunc("GET /admin/state", func(w http.ResponseWriter, r *http.Request) { sendJSON(w, 200, s.Snapshot()) })
 	// From the apply service (root): an apply finished; tell sessions whose PRs it contains.
 	mux.HandleFunc("POST /admin/applied", s.handleApplied)
+	mux.HandleFunc("DELETE /admin/browser-grants/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.Atoi(r.PathValue("id"))
+		if err := s.revokeWindow(id); err != nil {
+			sendJSON(w, 404, map[string]any{"error": err.Error()})
+			return
+		}
+		s.adminLog(r, fmt.Sprintf("BROWSER REVOKE #%d", id), "Browser window ended by Ben")
+		sendJSON(w, 200, map[string]any{"ok": true})
+	})
 	// Remote hosts: /admin/hosts/{name}/test and …/allow; /admin/mac/… is the
 	// "mac" host, as the UIs call it.
 	hostTest := func(name func(*http.Request) string) http.HandlerFunc {
@@ -297,7 +319,8 @@ func (s *Supervisor) adminHandler() http.Handler {
 			}
 		case "lockdown":
 			s.modes.Lockdown()
-			s.adminLog(r, "MODE lockdown", fmt.Sprintf("Lockdown; revoked %d bypasses/grants", s.grants.Clear()))
+			s.adminLog(r, "MODE lockdown", fmt.Sprintf("Lockdown; revoked %d bypasses/grants, ended %d browser windows", s.grants.Clear(),
+				s.endWindows("lockdown", func(*browserWindow) bool { return true })))
 		default:
 			sendJSON(w, 400, map[string]any{"error": "mode must be normal | bypass | lockdown"})
 			return

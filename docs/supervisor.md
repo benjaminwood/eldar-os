@@ -69,6 +69,30 @@ and `/admin/hosts/{name}/allow` (`/admin/mac/…` is the `mac` host, as the UIs
 call it). The UIs show the Mac's approvals, grants and allow list; other hosts
 appear as ordinary approvals until the UIs list them.
 
+## Browsers on other hosts
+
+A host can have a browser agents may drive: a real, logged-in profile (Arc on
+Ben's Mac first), through Playwright MCP running there. `hosts.json` gives the
+host's `browser`: its name, the bridge command on the host
+([arc-playwright-bridge](https://github.com/benjaminwood/arc-playwright-bridge)
+for Arc), origins never driven or opened (the supervisor's web UIs), and the
+host's tailnet device name. Sessions use the `browser` MCP server
+(`supervisor browser`): `browser_profiles`, `browser_request_access`,
+`browser_open_tab`, `browser_release`, plus Playwright's tools, relayed.
+
+Each window is one session × one profile for some minutes, and always an
+explicit decision by Ben: an approval, or a browser grant he made for that
+session and profile (`host:profile`, e.g. `mac:Default`). Global bypass, eldar
+and host grants never cover it. The session's MCP server holds a random secret
+(only its hash is kept here); it asks with `POST /browser/request` and opens
+`GET /browser/channel`, a WebSocket the supervisor pipes to `<bridge> mcp` over
+SSH. The channel always opens the approved profile. `browser_run_code_unsafe`
+is withheld (it could lift the blocked origins). A window ends on expiry,
+revoke (`DELETE /admin/browser-grants/{id}`) or lockdown: the channel closes
+(4001) and the next browser action asks again. While a host has an open
+window, the web UI refuses that host's tailnet device, so a page an agent
+drives can't approve anything.
+
 ## Chat, relay and Eldar's channels
 
 Eldar, the chief-of-staff session, loads two Claude channels from the
@@ -117,4 +141,6 @@ streamed over a WebSocket on the admin socket; closing it hangs up the attach).
 
 ## Not ported yet
 
-AWS credentials, MCP OAuth, Arc, the herdr approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error.
+AWS credentials, the herdr approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error. Not
+planned for now: MCP sign-ins (OAuth). Cron auto-approval exists but is unused
+(no crons are authorized).

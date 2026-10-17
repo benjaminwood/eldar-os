@@ -211,9 +211,9 @@ func (s *server) whois(next http.Handler) http.Handler {
 			http.Error(w, "not allowed", http.StatusForbidden)
 			return
 		}
-		if s.isBrowserDevice(who.Node.Name) && s.browserDriven(r.Context()) {
-			log.Printf("refused %s: Eldar is driving its browser", who.Node.ComputedName)
-			http.Error(w, "Eldar is driving the browser on this device. Use your phone or the TUI until its Arc window ends.", http.StatusForbidden)
+		if s.browserDriven(r.Context(), who.Node.Name) {
+			log.Printf("refused %s: an agent is driving its browser", who.Node.ComputedName)
+			http.Error(w, "An agent is driving the browser on this device. Use your phone or the TUI until its window ends.", http.StatusForbidden)
 			return
 		}
 		ctx := context.WithValue(r.Context(), ctxKey("device"), who.Node.ComputedName)
@@ -222,16 +222,23 @@ func (s *server) whois(next http.Handler) http.Handler {
 	})
 }
 
-// isBrowserDevice: node is the configured browser machine (FQDN, first label).
-func (s *server) isBrowserDevice(fqdn string) bool {
+// browserDriven: an agent has an open browser window on this node (FQDN,
+// first label), so pages it drives there mustn't reach this UI. A window names
+// its host's tailnet device; BrowserDevice, if set, counts for any window. If
+// the state can't be read, BrowserDevice is refused (unknown counts as yes).
+func (s *server) browserDriven(ctx context.Context, fqdn string) bool {
 	name, _, _ := strings.Cut(fqdn, ".")
-	return s.cfg.BrowserDevice != "" && strings.EqualFold(name, s.cfg.BrowserDevice)
-}
-
-// browserDriven reports an approved Arc window. Unknown counts as yes.
-func (s *server) browserDriven(ctx context.Context) bool {
+	configured := s.cfg.BrowserDevice != "" && strings.EqualFold(name, s.cfg.BrowserDevice)
 	st, err := s.cfg.Client.State(ctx)
-	return err != nil || len(st.BrowserGrants) > 0
+	if err != nil {
+		return configured
+	}
+	for _, g := range st.BrowserGrants {
+		if configured || (g.Device != "" && strings.EqualFold(name, g.Device)) {
+			return true
+		}
+	}
+	return false
 }
 
 // guard blocks cross-site writes: every non-GET needs X-Supervisor, and a

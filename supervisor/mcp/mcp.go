@@ -68,6 +68,10 @@ type server struct {
 	// start runs alongside the protocol loop (a channel's event stream);
 	// notify sends a notification to Claude.
 	start func(ctx context.Context, notify func(method string, params any))
+	// fallback answers tools/call for tools not in tools (relayed ones);
+	// onNotify sees notifications from the client.
+	fallback func(ctx context.Context, name string, params json.RawMessage) (any, *rpcError)
+	onNotify func(req rpcRequest)
 }
 
 func newServer(c *client, version string) *server {
@@ -106,7 +110,10 @@ func (s *server) serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			continue
 		}
 		if len(req.ID) == 0 {
-			continue // a notification: nothing to answer
+			if s.onNotify != nil {
+				s.onNotify(req) // a notification: nothing to answer
+			}
+			continue
 		}
 		// Calls can wait minutes for Ben; answer each on its own.
 		wg.Add(1)
@@ -165,6 +172,9 @@ func (s *server) handle(ctx context.Context, req rpcRequest) (any, *rpcError) {
 			return nil, &rpcError{-32602, "invalid params"}
 		}
 		t, ok := s.tools[p.Name]
+		if !ok && s.fallback != nil {
+			return s.fallback(ctx, p.Name, req.Params)
+		}
 		if !ok {
 			return errorText(fmt.Sprintf("Unknown tool: %s", p.Name)), nil
 		}

@@ -20,6 +20,8 @@ let
   supervisor = config.eldar-os.supervisor.package; # its `mcp` subcommand is the agents' client
   mcpServers = lib.mapAttrs (_: s: { type = "stdio"; args = [ ]; env = { }; } // s) ({
     supervisor = { command = "/run/current-system/sw/bin/supervisor"; args = [ "mcp" ]; };
+    # Drive a browser profile on Ben's machines (asks Ben per window).
+    browser = { command = "/run/current-system/sw/bin/supervisor"; args = [ "browser" ]; };
   } // cfg.mcpServers);
 in
 {
