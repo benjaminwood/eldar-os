@@ -45,5 +45,5 @@ streamed over a WebSocket on the admin socket; closing it hangs up the attach).
 
 ## Not ported yet
 
-Mac commands, AWS credentials, MCP OAuth, Arc, chat with Eldar, the tmux/herdr
+Mac commands, AWS credentials, MCP OAuth, Arc, the herdr
 approval nudges, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error.

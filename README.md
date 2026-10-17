@@ -29,6 +29,7 @@ whole machine.
   - `publish` — publish staging history to the public repo
 - `docs/install.md` — how it was installed, step by step, reproducibly.
 - `docs/publishing.md` — the private staging repo → public repo workflow.
+- `docs/roadmap.md` — what's done and what's left.
 - `docs/decisions/` — short records of the choices that shape the system.
 - `.github/workflows/ci.yml` — builds the system, and runs `scripts/e2e`
   on every push and nightly.
