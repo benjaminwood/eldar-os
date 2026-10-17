@@ -5,6 +5,8 @@
 //	supervisor web     the web UI (on the tailnet, with mobile push)
 //	supervisor mcp     the MCP server agents in Eldar's VM use to reach it (stdio)
 //	supervisor browser MCP server: drive a browser profile on Ben's machines (stdio)
+//	supervisor aws-login [session]
+//	                   sign the supervisor in to AWS SSO (Ben approves in a browser)
 //	supervisor channel chat|relay
 //	                   Eldar's channels: Ben's chat, and other agents' notify_ben events
 //	supervisor notify [--origin WHO] MESSAGE
@@ -55,6 +57,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, "supervisor channel:", err)
 			os.Exit(1)
 		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "aws-login" {
+		runAwsLogin(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "browser" {

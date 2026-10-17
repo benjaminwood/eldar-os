@@ -49,6 +49,8 @@ type Config struct {
 	GitHub                    *GitHubApp             // Eldar's GitHub App; nil = none
 	Hosts                     map[string]*RemoteHost // remote hosts by name (hosts.go); "mac" is Ben's Mac
 	HostAllowPath             string
+	AwsConfigPath             string // ~/.aws/config-style profiles; "" = no AWS
+	AwsStateDir               string
 }
 
 // Supervisor holds all state and serves both APIs.
@@ -72,6 +74,7 @@ type Supervisor struct {
 	watches     *Watches
 	hostAllow   *HostAllow
 	browsers    *Browsers
+	aws         *AWS
 	browserPins KeyPins
 	termSSH     TerminalSSH
 	runner      interface {
@@ -114,6 +117,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		watches:        NewWatches(cfg.WatchesPath),
 		hostAllow:      NewHostAllow(cfg.HostAllowPath),
 		browsers:       NewBrowsers(),
+		aws:            NewAWS(cfg.AwsConfigPath, cfg.AwsStateDir),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil

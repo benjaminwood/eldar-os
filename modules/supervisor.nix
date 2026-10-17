@@ -54,6 +54,15 @@ in
         the supervisor after changing it.
       '';
     };
+    awsConfig = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        An ~/.aws/config-style file: the AWS profiles (IAM Identity Center /
+        SSO) commands may name. Private, so not in this repo. The supervisor
+        signs in itself (`supervisor aws-login`, approved by Ben in a browser).
+      '';
+    };
     runAs = lib.mkOption {
       type = lib.types.str;
       default = "ben";
@@ -154,6 +163,8 @@ in
         HOME = state;
       } // lib.optionalAttrs (cfg.hostsFile != null) {
         SUPERVISOR_HOSTS = cfg.hostsFile;
+      } // lib.optionalAttrs (cfg.awsConfig != null) {
+        SUPERVISOR_AWS_CONFIG = cfg.awsConfig;
       };
       serviceConfig = {
         ExecStart = "${lib.getExe cfg.package} serve";

@@ -142,8 +142,8 @@ func (s *Supervisor) HandleExec(ctx context.Context, req ExecRequest) response {
 	if !ok {
 		return fail(400, id, OutBadRequest, fmt.Sprintf("Unknown profile '%s'. %s", req.Profile, s.profilesHint()))
 	}
-	if req.AwsProfile != "" {
-		return fail(400, id, OutBadRequest, "AWS credentials aren't available on this supervisor yet.")
+	if req.AwsProfile != "" && !s.aws.Has(req.AwsProfile) {
+		return fail(400, id, OutBadRequest, fmt.Sprintf("Unknown AWS profile '%s'. List them with supervisor_aws_profiles.", req.AwsProfile))
 	}
 
 	var full, shell string
@@ -278,6 +278,22 @@ func (s *Supervisor) execute(ctx context.Context, id int, full, shell string, re
 		return fail(502, id, out, "Credential fetch from 1Password failed"+forKey+". The command was NOT executed. Inform Ben.", "detail", err.Error())
 	}
 
+	if req.AwsProfile != "" {
+		env, err := s.aws.Creds(ctx, req.AwsProfile)
+		if err != nil {
+			e := base
+			e.Decision, e.DecisionReason = "deny", err.Error()
+			s.audit.Log(e)
+			return fail(502, id, OutMintFailed, fmt.Sprintf("AWS credentials for '%s' couldn't be minted, so nothing ran: %v. "+
+				"This isn't a refusal: Ben needs to sign the supervisor in to AWS again (`supervisor aws-login` on eldar-os; one sign-in covers every role).", req.AwsProfile, err))
+		}
+		if creds == nil {
+			creds = map[string]string{}
+		}
+		for k, v := range env {
+			creds[k] = v
+		}
+	}
 	spec := ExecSpec{Env: creds, Cwd: req.Cwd, Timeout: timeout, MaxOutput: s.cfg.MaxOutputBytes}
 	if shell != "" {
 		spec.Shell = shell

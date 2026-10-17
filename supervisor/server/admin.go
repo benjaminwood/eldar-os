@@ -34,7 +34,7 @@ func (s *Supervisor) Snapshot() api.State {
 		Grants:        s.grants.List(),
 		Profiles:      s.profiles.Names(),
 		Cache:         s.profiles.Cache(),
-		AwsProfiles:   []string{},
+		AwsProfiles:   s.aws.Profiles(),
 		ArcProfiles:   s.knownBrowserProfiles(),
 		Settings:      s.settings.Get(),
 		Chat:          chat,
@@ -115,8 +115,8 @@ func (s *Supervisor) parseAdminGrant(b adminGrantBody) (api.GrantInput, string) 
 	if !ok {
 		return api.GrantInput{}, `aws must be "*" or an array of AWS profile names`
 	}
-	if len(aws.Names) > 0 {
-		return api.GrantInput{}, "unknown AWS profiles: " + strings.Join(aws.Names, ", ")
+	if bad := slices.DeleteFunc(slices.Clone(aws.Names), s.aws.Has); len(bad) > 0 {
+		return api.GrantInput{}, "unknown AWS profiles: " + strings.Join(bad, ", ")
 	}
 	in := api.GrantInput{Target: target, Session: b.Session, Profile: profile, Credentials: creds, Aws: aws, Note: truncRunes(b.Note, 200)}
 	if in.Session == "" {
@@ -138,6 +138,27 @@ func (s *Supervisor) adminHandler() http.Handler {
 	mux.HandleFunc("GET /admin/state", func(w http.ResponseWriter, r *http.Request) { sendJSON(w, 200, s.Snapshot()) })
 	// From the apply service (root): an apply finished; tell sessions whose PRs it contains.
 	mux.HandleFunc("POST /admin/applied", s.handleApplied)
+	// AWS: sign the supervisor in to an SSO session (device code Ben approves).
+	mux.HandleFunc("GET /admin/aws", func(w http.ResponseWriter, r *http.Request) {
+		sendJSON(w, 200, map[string]any{"sessions": s.aws.Status(), "profiles": s.aws.Profiles()})
+	})
+	mux.HandleFunc("POST /admin/aws/login", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Session string `json:"session"`
+		}
+		readJSON(r, &b)
+		l, err := s.aws.StartLogin(b.Session, func(l AwsLogin) {
+			logf("aws: sign-in to %s %s: %s", l.Session, l.Status, l.Detail)
+			s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "AWS SIGN-IN " + l.Session, Decision: "allow", DecisionReason: l.Status + ": " + l.Detail, Mode: string(s.modes.Current())})
+			s.n.Changed()
+		})
+		if err != nil {
+			sendJSON(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		s.adminLog(r, "AWS SIGN-IN "+l.Session, "Started an AWS SSO sign-in (device code)")
+		sendJSON(w, 200, l)
+	})
 	mux.HandleFunc("DELETE /admin/browser-grants/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.Atoi(r.PathValue("id"))
 		if err := s.revokeWindow(id); err != nil {

@@ -65,7 +65,7 @@ jobs. Done last.
 - [ ] Reload the patched extension in Arc from the bridge's checkout (it's
       still loaded from the legacy folder), then drop the legacy paths
 - [x] Approval nudges in herdr
-- [ ] AWS credentials (needs a fresh SSO sign-in for the supervisor)
+- [x] AWS credentials: the supervisor signs in to SSO itself (`supervisor aws-login`)
 - [ ] ~~MCP OAuth~~: not porting for now. Cron auto-approval stays unused (the
       code exists; no crons are authorized)
 - [ ] A replacement for `suben` / the secrets-dump socket

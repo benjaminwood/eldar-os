@@ -9,6 +9,8 @@
     environmentFile = config.sops.secrets.supervisor-env.path;
     # Other machines agents may run commands on: Ben's Mac ("mac").
     hostsFile = "/var/lib/eldar-os/secrets/supervisor/hosts.json";
+    # AWS profiles (one SSO session; `supervisor aws-login` signs in).
+    awsConfig = "/var/lib/eldar-os/secrets/supervisor/aws-config";
     web = {
       enable = true;
       # A new name while the old eldar-proxy still runs; renamed at cutover.

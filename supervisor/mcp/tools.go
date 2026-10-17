@@ -219,6 +219,9 @@ func (s *server) toolList() []tool {
 							"lacks is an error that runs nothing."},
 					"cwd": map[string]any{"type": "string", "description": "Working directory. Defaults to this session's " +
 						"project directory. Set this instead of starting the command with `cd`."},
+					"aws_profile": map[string]any{"type": "string", "description": "Mint short-lived AWS credentials for this AWS " +
+						"profile (supervisor_aws_profiles lists them) and export AWS_* for this one command; what aws and " +
+						"kubectl authenticate with. Pair it with credentials: [] unless the command also needs a 1Password secret."},
 					"timeout_seconds": map[string]any{"type": "number", "default": defaultTimeoutS,
 						"description": fmt.Sprintf("Wall clock for the command. Default %ds, ceiling %ds. On expiry it's "+
 							"killed and you still get what it printed, flagged as timed out. Ben sees the duration.", defaultTimeoutS, maxTimeoutS)},
@@ -296,6 +299,22 @@ func (s *server) toolList() []tool {
 			run: s.credentialsTool,
 		},
 		{
+			Name:        "supervisor_aws_profiles",
+			Description: "The AWS profiles (account and role) supervisor_exec's aws_profile can name. No approval.",
+			Schema:      func([]string, string) map[string]any { return object(map[string]any{}) },
+			run: func(ctx context.Context, _ map[string]any) map[string]any {
+				data, err := s.c.get(ctx, "/aws/profiles")
+				if err != nil {
+					return unreachable(err)
+				}
+				names, _ := strList(data["profiles"])
+				if len(names) == 0 {
+					return textResult("(no AWS profiles are configured on the supervisor)")
+				}
+				return textResult(strings.Join(names, "\n"))
+			},
+		},
+		{
 			Name:        "supervisor_status",
 			Description: "The supervisor's mode (normal, bypass, lockdown), its 1Password profiles and its limits (command timeouts, output cap, approval window). No approval.",
 			Schema:      func([]string, string) map[string]any { return object(map[string]any{}) },
@@ -321,6 +340,10 @@ func (s *server) toolList() []tool {
 					"credentials": map[string]any{
 						"anyOf":       []any{map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, map[string]any{"type": "string", "enum": []string{"*"}}},
 						"description": "Credential names the commands need ([] = none, \"*\" = any).",
+					},
+					"aws": map[string]any{
+						"anyOf":       []any{map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, map[string]any{"type": "string", "enum": []string{"*"}}},
+						"description": "AWS profiles the commands pass as aws_profile ([] = none, the default). A grant without them never covers aws_profile calls.",
 					},
 					"minutes": map[string]any{"type": "number", "description": "Duration, 1-480. Keep it short."},
 					"reason":  map[string]any{"type": "string", "description": "What the work is for. Ben reads this on his phone."},
@@ -392,6 +415,9 @@ func (s *server) execTool(ctx context.Context, args map[string]any) map[string]a
 	// it out injects the whole profile.
 	if creds, ok := strList(args["credentials"]); ok {
 		payload["credentials"] = creds
+	}
+	if p := str(args, "aws_profile"); p != "" {
+		payload["awsProfile"] = p
 	}
 	s.session(payload)
 	data, err := s.c.post(ctx, "/exec", payload, httpTimeoutFor(timeoutS))
@@ -520,7 +546,7 @@ func (s *server) grantTool(ctx context.Context, args map[string]any) map[string]
 	}
 	payload := map[string]any{
 		"target": "eldar", "minutes": minutes, "reason": str(args, "reason"),
-		"profile": s.defaultProfile(ctx, args), "credentials": args["credentials"], "aws": []string{}, "cwd": cwd(args),
+		"profile": s.defaultProfile(ctx, args), "credentials": args["credentials"], "aws": awsScope(args["aws"]), "cwd": cwd(args),
 	}
 	s.session(payload)
 	data, err := s.c.post(ctx, "/grant-request", payload, 310*time.Second)
@@ -601,4 +627,15 @@ func (s *server) hostExecTool(ctx context.Context, args map[string]any) map[stri
 		return failure(data)
 	}
 	return execOutput(data, timeoutS)
+}
+
+// awsScope: a grant's aws field as sent: "*" or a list (default none).
+func awsScope(v any) any {
+	if s, ok := v.(string); ok && s == "*" {
+		return "*"
+	}
+	if l, ok := strList(v); ok {
+		return l
+	}
+	return []string{}
 }

@@ -27,6 +27,7 @@ import (
 //	SUPERVISOR_SSH_KEY          key for the VM
 //	SUPERVISOR_KNOWN_HOSTS      the VM's pinned host key
 //	SUPERVISOR_DEFAULT_PROFILE  the profile agents use unless told otherwise
+//	SUPERVISOR_AWS_CONFIG       ~/.aws/config-style AWS profiles (SSO) commands may name
 //	SUPERVISOR_HOSTS            hosts.json: remote hosts agents may run commands on
 //	SUPERVISOR_HOST_KEYS        directory of their private keys, one file per host name
 //	SUPERVISOR_GITHUB_APP_ID, SUPERVISOR_GITHUB_INSTALLATION_ID,
@@ -67,6 +68,8 @@ func runServe(args []string) {
 		RelayStatePath:        state + "/relay-state.json",
 		WatchesPath:           state + "/watches.json",
 		HostAllowPath:         state + "/host-allow.json",
+		AwsConfigPath:         os.Getenv("SUPERVISOR_AWS_CONFIG"),
+		AwsStateDir:           state + "/aws",
 	}
 	runner := &server.SSHRunner{
 		Host:        env("SUPERVISOR_AGENT_HOST", "10.42.0.2"),

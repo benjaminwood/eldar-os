@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/benjaminwood/eldar-os/supervisor/api"
@@ -126,8 +127,8 @@ func (s *Supervisor) grantScope(b GrantRequestBody, minutes int) (api.GrantInput
 	if host && (aws.Any || len(aws.Names) > 0) {
 		return api.GrantInput{}, "commands on other hosts can't use AWS; leave aws out"
 	}
-	if len(aws.Names) > 0 {
-		return api.GrantInput{}, "unknown AWS profiles: " + strings.Join(aws.Names, ", ") + " (AWS isn't set up on this supervisor yet)"
+	if bad := slices.DeleteFunc(slices.Clone(aws.Names), s.aws.Has); len(bad) > 0 {
+		return api.GrantInput{}, "unknown AWS profiles: " + strings.Join(bad, ", ")
 	}
 	if target != "eldar" {
 		aws = api.Creds{Names: []string{}}

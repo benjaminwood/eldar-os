@@ -48,6 +48,24 @@ and the default one from `/status`, so they stay configuration
 random session key at start, which the supervisor pins to the session ID. A
 session picks the server up when it starts.
 
+## AWS
+
+A command can name an AWS profile (`awsProfile`; `aws_profile` in
+`supervisor_exec`): the supervisor mints short-lived role credentials through
+IAM Identity Center and exports `AWS_*` for that one command. Profiles come
+from `awsConfig`, an ~/.aws/config-style file in the secrets repo. The
+supervisor signs in to each SSO session itself: `supervisor aws-login` (on
+eldar-os, as an admin) prints a link and code Ben approves in a browser; the
+token, its rotating refresh token and the client registration stay in
+`/var/lib/supervisor/aws/` (mode 600). One sign-in covers every profile of the
+session and lasts until the registration expires (about 90 days) or the
+refresh token stops working; then requests fail with `mint_failed`, telling
+the agent to ask Ben to sign in again. Minted credentials are cached in memory
+until a minute before they expire.
+
+Policy allow rules only cover an AWS request when they name its profile (or
+`*`) in `aws`, and grants cover only the AWS profiles they list.
+
 ## Approval nudges
 
 When a session in a herdr pane is waiting on Ben (a command, a browser
@@ -148,6 +166,6 @@ streamed over a WebSocket on the admin socket; closing it hangs up the attach).
 
 ## Not ported yet
 
-AWS credentials, and the secrets-dump socket used by `suben`. Requests for them get a clear "not available yet" error. Not
+The secrets-dump socket used by `suben`. Not
 planned for now: MCP sign-ins (OAuth). Cron auto-approval exists but is unused
 (no crons are authorized).

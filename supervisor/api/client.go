@@ -399,3 +399,37 @@ func (c *Client) streamOnce(ctx context.Context, ch chan<- Event) error {
 	}
 	return errors.New("event stream closed")
 }
+
+// AwsLogin is an AWS SSO sign-in in progress (or its outcome).
+type AwsLogin struct {
+	Session         string    `json:"session"`
+	VerificationURL string    `json:"verificationUrl"`
+	UserCode        string    `json:"userCode"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	Status          string    `json:"status"`
+	Detail          string    `json:"detail,omitempty"`
+}
+
+// AwsLogin starts signing the supervisor in to an AWS SSO session ("" = the only one).
+func (c *Client) AwsLogin(ctx context.Context, session string) (AwsLogin, error) {
+	var l AwsLogin
+	err := c.do(ctx, "POST", "/admin/aws/login", map[string]string{"session": session}, &l)
+	return l, err
+}
+
+// AwsStatus: the supervisor's AWS SSO sessions, signed in or not, with any sign-in in progress.
+func (c *Client) AwsStatus(ctx context.Context) ([]struct {
+	Session  string    `json:"session"`
+	SignedIn bool      `json:"signedIn"`
+	Login    *AwsLogin `json:"login"`
+}, error) {
+	var r struct {
+		Sessions []struct {
+			Session  string    `json:"session"`
+			SignedIn bool      `json:"signedIn"`
+			Login    *AwsLogin `json:"login"`
+		} `json:"sessions"`
+	}
+	err := c.do(ctx, "GET", "/admin/aws", nil, &r)
+	return r.Sessions, err
+}

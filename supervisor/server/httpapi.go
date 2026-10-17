@@ -84,7 +84,7 @@ func (s *Supervisor) agentHandler() http.Handler {
 		sendJSON(w, 200, map[string]any{"profile": p.Name, "account": p.Account, "credentials": sortedKeys(env)})
 	})
 	mux.HandleFunc("GET /aws/profiles", func(w http.ResponseWriter, r *http.Request) {
-		sendJSON(w, 200, map[string]any{"profiles": []string{}})
+		sendJSON(w, 200, map[string]any{"profiles": s.aws.Profiles()})
 	})
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		mode, exp := s.modes.Status()
