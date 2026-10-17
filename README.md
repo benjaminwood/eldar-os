@@ -1,4 +1,9 @@
-# eldar-os
+# <img src="docs/logo.svg" alt="" width="40" align="top"> eldar-os
+
+<p align="center">
+  <a href="docs/promo/promo.mp4"><img src="docs/promo/promo.gif" width="100%" alt="A 55-second tour: approving and denying from a phone, granting one session a scope in the TUI, stepping into a Claude session's terminal from a phone, chatting with Eldar, and the audit log"></a>
+  <br><sub>Real software, recorded live against made-up data. <a href="docs/promo/promo.mp4">Full quality (MP4)</a>.</sub>
+</p>
 
 A computing environment for doing serious work with AI agents: the metal
 under a one-person software factory. Day to day, many Claude Code agents
@@ -13,11 +18,6 @@ time. A grant to one Claude session is the way to stop being
 asked. The whole machine is one flake, and the agents change it the same
 way a person would: they open a pull request, a human merges it, and the
 machine applies the change seconds later.
-
-<p align="center">
-  <a href="docs/promo/promo.mp4"><img src="docs/promo/promo.gif" width="100%" alt="A 55-second tour: approving and denying from a phone, granting one session a scope in the TUI, stepping into a Claude session's terminal from a phone, chatting with Eldar, and the audit log"></a>
-  <br><sub>Real software, recorded live against made-up data. <a href="docs/promo/promo.mp4">Full quality (MP4)</a>.</sub>
-</p>
 
 <p align="center">
   <img src="docs/screenshots/web-approvals.png" width="23%" alt="The web UI on a phone: four approvals waiting, each with its command, session, credentials and reason">
