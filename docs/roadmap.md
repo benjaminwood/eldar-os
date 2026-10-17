@@ -79,7 +79,7 @@ jobs. Done last.
 - [ ] `*.test` dev domains (dev-dns)
 - [x] Chrome for Playwright: in Eldar's VM (rootless Docker), `playwright` MCP
       in every session
-- [ ] Ben watches that Chrome from his tailnet
+- [x] Ben watches that Chrome from his tailnet (eldar-chrome-next; renamed at cutover)
 - [ ] Kubernetes lab VM (kube-vm)
 
 ## 5. Cutover

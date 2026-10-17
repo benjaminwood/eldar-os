@@ -34,6 +34,7 @@
         microvm.nixosModules.host
         ./modules/eldar-vm.nix
         ./modules/supervisor.nix
+        ./modules/tailnet-proxy.nix
         ./hosts/eldar-os
       ];
     };

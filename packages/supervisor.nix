@@ -6,7 +6,7 @@
   version = "0.1.0";
   src = lib.cleanSource ../supervisor;
   vendorHash = "sha256-O0kJx0qwRR/CrmTY9rDOtk51yeUtmC7oC6MyNSymPiA=";
-  subPackages = [ "cmd/supervisor" "cmd/apply-hook" ];
+  subPackages = [ "cmd/supervisor" "cmd/apply-hook" "cmd/tailnet-proxy" ];
   env.CGO_ENABLED = 0;
   ldflags = [ "-s" "-w" ];
   # Run every package's tests (the server's parity tests), not just the

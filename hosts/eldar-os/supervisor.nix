@@ -18,6 +18,13 @@
       environmentFile = config.sops.secrets.supervisor-web-env.path;
     };
   };
+  # Ben watches the VM's Chrome (modules/vm-chrome.nix) from his tailnet.
+  # A new name while the old stack's eldar-chrome still runs.
+  eldar-os.tailnetProxies.chrome = {
+    hostname = "eldar-chrome-next";
+    target = "http://${config.eldar-os.eldarVm.address}:3000";
+    environmentFile = config.sops.secrets.supervisor-web-env.path;
+  };
   sops.secrets.supervisor-web-env = {
     owner = "supervisor-web";
     restartUnits = [ "supervisor-web.service" ];

@@ -215,6 +215,7 @@ node a single-use auth key for its tag:
 | host (`tailscaled`) | `tag:eldar-os` | `/var/lib/tailscale/authkey` |
 | web UI (`supervisor-web`) | `tag:eldar-proxy` | `/var/lib/supervisor-web/authkey` |
 | webhooks (`eldar-os-apply-hook`) | `tag:eldar-os-hook` | `/var/lib/eldar-os-hook/authkey` |
+| the VM's Chrome stream (`tailnet-proxy-chrome`) | `tag:eldar-chrome` | `/var/lib/tailnet-proxy-chrome/authkey` (owner `tailnet-proxy`) |
 
 Restart the service (for the host, apply); it registers and deletes the key.
 
