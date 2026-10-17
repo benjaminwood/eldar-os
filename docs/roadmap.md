@@ -32,7 +32,7 @@ Checked items are done; the order of sections is roughly the order of work.
 - [x] Supervisor hands out GitHub App tokens; git and gh in the VM use them
 - [x] Create the GitHub App, install it on the staging repo, key into the
       supervisor (sops) and the Eldar-OS vault
-- [ ] Eldar's first PR, merged by Ben on GitHub, applied by the machine
+- [x] Eldar's first PR, merged by Ben on GitHub, applied by the machine (#1, yq)
 
 ## 2. Eldar's identity and tools: the workspace
 
