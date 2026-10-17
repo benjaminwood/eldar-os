@@ -17,24 +17,37 @@ git -C eldar-os remote add public git@github.com:benjaminwood/eldar-os.git
 ## Publishing
 
 ```bash
-scripts/publish             # everything on staging main
-scripts/publish <commit>    # up to a specific commit
+scripts/publish --review             # unpublished commits → a file to review
+scripts/publish --reviewed <commit>  # publish up to the reviewed commit
 ```
 
-It only ever fast-forwards the public `main` with commits that are already on
-staging `main`, and scans every unpublished commit with gitleaks first.
+Two checks before anything is public:
 
-Unpublished history can still be rewritten, and that's the point of staging:
-if something that shouldn't be public lands in a commit, remove it from history
-(rebase, then force-push staging) before publishing. A follow-up commit that
-deletes it is not enough; the original commit would still be published.
+1. **A review** of the unpublished commits (messages and diffs) for what must
+   not be public that no scanner recognizes: personal data, private
+   infrastructure (tailnet IPs, ACL rules, account ids, 1Password profile
+   names), an employer's internals, anything copied from the private repos,
+   unfixed weaknesses. `--review` writes the commits to a file and lists what
+   to look for; a reviewer with fresh context (a person or an agent told only
+   what this is) reads it. Publishing takes the reviewed commit, so anything
+   that lands after the review needs a new one.
+2. **gitleaks** scans every unpublished commit for secrets, at publish.
+
+It only ever fast-forwards the public `main` with commits that are already on
+staging `main`. Unpublished history can still be rewritten, and that's the
+point of staging: if something that shouldn't be public lands in a commit,
+remove it from history (rebase, then force-push staging) before publishing. A
+follow-up commit that deletes it is not enough; the original commit would
+still be published.
 
 ## What stays out of both
 
 Staging is published eventually, in full. So anything that must never be
-public (secrets, personal data, Eldar's memory and persona) doesn't go in
-staging either. It lives in a separate private repo that this flake takes as
-an input (not created yet), or outside git entirely.
+public doesn't go in staging either. It goes in the private
+`eldar-os-secrets` repo, which the machine fetches alongside staging: sops
+secrets, the supervisor's policy, remote hosts (`supervisor/hosts.json`), AWS
+profiles, and private notes (`notes/`). Eldar's persona and memory live in its
+workspace, outside both.
 
 ## CI
 

@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
 # Publish staging history to the public repo.
 #
-#   scripts/publish            publish staging main
-#   scripts/publish <commit>   publish up to <commit> (must be on staging main)
+#   scripts/publish --review [<commit>]
+#                    write the unpublished commits (messages and diffs) to a
+#                    file for a review of what must not be public, and say
+#                    what to look for
+#   scripts/publish --reviewed <commit>
+#                    publish staging main up to <commit>, the commit that
+#                    was reviewed
 #
 # Development happens in the private staging repo (remote `origin`); the
 # public repo (remote `public`) only ever receives a fast-forward of the same
-# commits. Before pushing, every commit not yet public is scanned for secrets
-# with gitleaks. If anything turns up, fix it by rewriting staging history
-# (allowed: it isn't public yet), never by a follow-up commit.
+# commits. Two checks before pushing: a review for anything that must not be
+# public that a scanner can't recognize (personal data, private
+# infrastructure), and gitleaks for secrets. If either finds something, fix it
+# by rewriting staging history (allowed: it isn't public yet), never by a
+# follow-up commit. See docs/publishing.md.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 GITLEAKS=zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
 
+mode=publish target_ref=
+case "${1:-}" in
+  --review) mode=review; target_ref=${2:-origin/main} ;;
+  --reviewed) [ -n "${2:-}" ] || { echo "usage: scripts/publish --reviewed <commit>" >&2; exit 2; }; target_ref=$2 ;;
+  *) sed -n '2,10p' "$0" >&2; exit 2 ;;
+esac
+
 git remote get-url public >/dev/null 2>&1 || { echo "no 'public' remote" >&2; exit 1; }
 git fetch -q origin
 git fetch -q public 2>/dev/null || true
 
-target=$(git rev-parse --verify "${1:-origin/main}^{commit}")
+target=$(git rev-parse --verify "$target_ref^{commit}")
 git merge-base --is-ancestor "$target" origin/main \
   || { echo "$target is not on staging main (push it to origin first)" >&2; exit 1; }
 
@@ -32,7 +46,34 @@ fi
 
 count=$(git rev-list --count "$range")
 [ "$count" -gt 0 ] || { echo "nothing to publish"; exit 0; }
-echo "publishing $count commit(s):"
+short=$(git rev-parse --short=12 "$target")
+
+if [ "$mode" = review ]; then
+  out=${TMPDIR:-/tmp}/eldar-os-publish-review-$short.patch
+  git log --reverse -p --stat --format='==== commit %H%nAuthor: %an <%ae>%nDate:   %ad%n%n%B' "$range" > "$out"
+  cat <<EOF
+$count unpublished commit(s) up to $short, $(wc -l < "$out") lines: $out
+
+Review it for anything that must not be public. gitleaks (run at publish)
+catches secrets; this is for what a scanner can't recognize:
+  - personal data: addresses, phone numbers, family, health, finances, private
+    email addresses beyond the author lines, other people's names or data
+  - private infrastructure: tailnet IPs, device names beyond the ones already
+    public, ACL rules or weaknesses, internal hostnames, account ids (AWS,
+    1Password, GitHub App or installation ids), 1Password profile names
+  - an employer's or client's internals: repo names, systems, customers
+  - anything copied from the private repos (eldar-os-secrets, workspaces)
+  - security weaknesses not yet fixed
+Machine facts that make the config work (hostnames of this machine, the public
+repos, the tailnet name in public URLs) are fine.
+
+Then publish exactly this commit:
+  scripts/publish --reviewed $short
+EOF
+  exit 0
+fi
+
+echo "publishing $count commit(s), reviewed up to $short:"
 git log --oneline "$range"
 
 echo; echo "scanning with gitleaks…"
@@ -40,4 +81,4 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS" \
   git --no-banner --redact --log-opts="$range" /repo
 
 git push public "$target:refs/heads/main"
-echo "published $(git rev-parse --short "$target") to $(git remote get-url public)"
+echo "published $short to $(git remote get-url public)"
