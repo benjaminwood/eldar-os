@@ -50,8 +50,8 @@ passkey, and refuses the device whose browser an agent is driving.
 
 ## Consequences
 
-The safe path is the default, and every exception is visible, scoped, and
-ends. The cost is interruptions: Ben answers many approvals, so answering has
+The safe path is the default, and every exception is visible, scoped and
+revocable. The cost is interruptions: Ben answers many approvals, so answering has
 to be fast wherever he is (TUI, web, push notifications, the approval tray
 over a terminal), and granting the right scope has to be easy enough that he
 doesn't reach for global bypass instead. Grants vanishing on restart can
