@@ -21,7 +21,7 @@ scripts/publish --review             # unpublished commits → a file to review
 scripts/publish --reviewed <commit>  # publish up to the reviewed commit
 ```
 
-Two checks before anything is public:
+Three checks before anything is public:
 
 1. **A review** of the unpublished commits (messages and diffs) for what must
    not be public that no scanner recognizes: personal data, private
@@ -31,7 +31,12 @@ Two checks before anything is public:
    to look for; a reviewer with fresh context (a person or an agent told only
    what this is) reads it. Publishing takes the reviewed commit, so anything
    that lands after the review needs a new one.
-2. **gitleaks** scans every unpublished commit for secrets, at publish.
+2. **A deny list** of strings that must never be public (the tailnet's name,
+   device names): `publish-denylist` in the secrets repo, private because it
+   names what it protects. Any hit in a commit message, diff or published file
+   stops the publish (and `--review`), reported by commit and file only. A
+   missing list stops it too.
+3. **gitleaks** scans every unpublished commit for secrets, at publish.
 
 It only ever fast-forwards the public `main` with commits that are already on
 staging `main`. Unpublished history can still be rewritten, and that's the

@@ -11,9 +11,10 @@
 #
 # Development happens in the private staging repo (remote `origin`); the
 # public repo (remote `public`) only ever receives a fast-forward of the same
-# commits. Two checks before pushing: a review for anything that must not be
-# public that a scanner can't recognize (personal data, private
-# infrastructure), and gitleaks for secrets. If either finds something, fix it
+# commits. Three checks before pushing: a deny list of strings that must never
+# be public (private, in the secrets repo: e.g. the tailnet's name), a review
+# for what no scanner recognizes (personal data, private infrastructure), and
+# gitleaks for secrets. If either finds something, fix it
 # by rewriting staging history (allowed: it isn't public yet), never by a
 # follow-up commit. See docs/publishing.md.
 set -euo pipefail
@@ -47,6 +48,30 @@ fi
 count=$(git rev-list --count "$range")
 [ "$count" -gt 0 ] || { echo "nothing to publish"; exit 0; }
 short=$(git rev-parse --short=12 "$target")
+
+# The deny list: fixed strings, case-insensitive, in commit messages, diffs
+# and the published files. It's private (it names what it protects), so a
+# missing list stops the publish. Hits are reported by commit and file only.
+DENYLIST=${DENYLIST:-../eldar-os-secrets/publish-denylist}
+[ -r "$DENYLIST" ] || { echo "no deny list at $DENYLIST (the secrets repo's publish-denylist); refusing" >&2; exit 1; }
+deny=$(mktemp); trap 'rm -f "$deny"' EXIT
+grep -v '^#' "$DENYLIST" | grep . > "$deny" || true
+hits=0
+for c in $(git rev-list "$range"); do
+  if git log -1 --format=%B "$c" | grep -qiF -f "$deny"; then
+    echo "DENIED: commit $(git rev-parse --short=12 "$c") message"; hits=1
+  fi
+  for f in $(git show --format= --name-only "$c"); do
+    if git show --format= "$c" -- "$f" | grep '^+' | grep -qiF -f "$deny"; then
+      echo "DENIED: commit $(git rev-parse --short=12 "$c") adds it in $f"; hits=1
+    fi
+  done
+done
+for f in $(git grep -liF -f "$deny" "$target" -- . | sed "s/^$target://"); do
+  echo "DENIED: $f (in the published files)"; hits=1
+done
+[ "$hits" = 0 ] || { echo "a deny-listed string would be published: rewrite staging history to remove it" >&2; exit 1; }
+echo "deny list: clean ($(grep -c . "$deny") strings)"
 
 if [ "$mode" = review ]; then
   out=${TMPDIR:-/tmp}/eldar-os-publish-review-$short.patch
