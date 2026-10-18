@@ -13,16 +13,14 @@
     awsConfig = "/var/lib/eldar-os/secrets/supervisor/aws-config";
     web = {
       enable = true;
-      # A new name while the old eldar-proxy still runs; renamed at cutover.
-      hostname = "supervisor-next";
+      hostname = "supervisor";
       streamHost = config.eldar-os.tailnetProxies.chrome.hostname; # the Browser tab
       environmentFile = config.sops.secrets.supervisor-web-env.path;
     };
   };
   # Ben watches the VM's Chrome (modules/vm-chrome.nix) from his tailnet.
-  # A new name while the old stack's eldar-chrome still runs.
   eldar-os.tailnetProxies.chrome = {
-    hostname = "eldar-chrome-next";
+    hostname = "eldar-chrome";
     target = "http://${config.eldar-os.eldarVm.address}:3000";
     frameHosts = [ config.eldar-os.supervisor.web.hostname ]; # the web UI's Browser tab
     environmentFile = config.sops.secrets.supervisor-web-env.path;

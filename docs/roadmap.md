@@ -82,7 +82,7 @@ jobs. Done last.
 - [ ] `*.test` dev domains (dev-dns)
 - [x] Chrome for Playwright: in Eldar's VM (rootless Docker), `playwright` MCP
       in every session
-- [x] Ben watches that Chrome from his tailnet (eldar-chrome-next; renamed at cutover),
+- [x] Ben watches that Chrome from his tailnet (eldar-chrome),
       also in the web UI's Browser tab (framed from its own origin)
 - [ ] Kubernetes lab VM (kube-vm)
 
@@ -94,7 +94,8 @@ jobs. Done last.
 - [ ] Raise Eldar's VM to full size (24 vCPU / 56 GB)
 - [ ] Move today's Eldar state: Claude sessions and `.claude`, chat history,
       memory
-- [ ] Rename `supervisor-next` → the final web UI name; retire the Docker stack
+- [x] The web UI is `supervisor` and Chrome is `eldar-chrome` on the tailnet
+- [ ] Retire the Docker stack
 
 ## Cycle time (0012)
 
