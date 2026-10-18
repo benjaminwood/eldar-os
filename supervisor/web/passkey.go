@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,6 +45,7 @@ type storedKey struct {
 }
 
 type passkeyFile struct {
+	RPID   string      `json:"rpId,omitempty"` // the domain the keys were made for
 	UserID []byte      `json:"userId"`
 	Keys   []storedKey `json:"keys"`
 }
@@ -103,6 +105,25 @@ func newPasskeys(dir, host string) (*passkeys, error) {
 	if b, err := os.ReadFile(p.path); err == nil {
 		if err := json.Unmarshal(b, &p.data); err != nil {
 			return nil, err
+		}
+	}
+	// A passkey only works on the domain it was made for. After a rename the
+	// stored ones can never sign in, and while they exist no new one can be
+	// enrolled: set them aside so the first device can enrol again.
+	if p.data.RPID != "" && p.data.RPID != host {
+		old := filepath.Join(dir, "passkeys."+p.data.RPID+".json")
+		if err := os.Rename(p.path, old); err != nil {
+			return nil, err
+		}
+		log.Printf("passkeys were made for %s, not %s: kept in %s; enrol again", p.data.RPID, host, old)
+		p.data = passkeyFile{}
+	}
+	if p.data.RPID == "" {
+		p.data.RPID = host
+		if len(p.data.UserID) > 0 {
+			if err := writeFile0600(p.path, p.data); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if len(p.data.UserID) == 0 {
