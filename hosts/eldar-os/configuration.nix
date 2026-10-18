@@ -14,7 +14,12 @@
   # Kernel messages on serial too, so the VM can be debugged headless. tty0 is
   # last, so it stays /dev/console: on bare metal the LUKS prompt must show on
   # screen, not on a serial port nobody is watching.
-  boot.kernelParams = [ "console=ttyS0,115200n8" "console=tty0" ];
+  #
+  # no-kvmapf: while eldar-os runs as a VM, a host that swaps out its memory
+  # sends async page faults, and one landing in kernel code panics the guest
+  # ("Host injected async #PF in kernel mode"). Without them the guest just
+  # waits for the page. No effect on bare metal.
+  boot.kernelParams = [ "console=ttyS0,115200n8" "console=tty0" "no-kvmapf" ];
 
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
