@@ -7,6 +7,12 @@
   # memMiB = 57344 (all but ~8 GB for the host, supervisor and desktop).
   eldar-os.eldarVm.vcpu = 6;
   # Playwright on the VM's own Chrome (modules/vm-chrome.nix), for every session.
+  # Eldar's identity and Claude settings live in its workspace repo (private).
+  eldar-os.eldarVm.claudeLinks = {
+    "CLAUDE.md" = "user/CLAUDE.md";
+    "settings.json" = "user/settings.json";
+    "projects/-home-eldar-workspace/memory" = "user/memory";
+  };
   eldar-os.eldarVm.mcpServers.playwright = {
     command = "/run/current-system/sw/bin/npx";
     args = [ "-y" "@playwright/mcp@0.0.83" "--cdp-endpoint" "http://127.0.0.1:19222" "--viewport-size" "1280,800" ];

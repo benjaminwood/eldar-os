@@ -43,6 +43,18 @@ in
         These are eldar-os's; Eldar's own live in ~/workspace/.mcp.json.
       '';
     };
+    claudeLinks = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      example = { "CLAUDE.md" = "user/CLAUDE.md"; };
+      description = ''
+        Paths in eldar's ~/.claude (keys) linked to files or directories in
+        ~/workspace (values), so the workspace repo versions them. A tool that
+        replaces a link with a real file (saving by rename) gets it adopted:
+        its contents go into the workspace and the link comes back. Whatever
+        has to move out of the way lands in ~/.claude/.displaced, never deleted.
+      '';
+    };
     config = lib.mkOption {
       type = lib.types.deferredModule;
       default = { };
@@ -345,7 +357,39 @@ in
             || { new=$(jq '.enableAllProjectMcpServers = true' "$s"); printf '%s\n' "$new" > "$s"; }
         '';
       };
-    }) [ "eldar" "ben" ]);
+    }) [ "eldar" "ben" ]) // lib.optionalAttrs (cfg.claudeLinks != { }) {
+      # ~/.claude pieces that live in the workspace repo (claudeLinks).
+      claude-links = {
+        description = "Link eldar's ~/.claude to the workspace repo";
+        wantedBy = [ "multi-user.target" ];
+        unitConfig.RequiresMountsFor = [ "/home/eldar/workspace" ];
+        path = [ pkgs.coreutils pkgs.diffutils ];
+        serviceConfig = { Type = "oneshot"; User = "eldar"; };
+        script = lib.concatStrings (lib.mapAttrsToList (link: target: ''
+          link=/home/eldar/.claude/${link} target=/home/eldar/workspace/${target}
+          if [ -e "$link" ] && [ ! -L "$link" ]; then
+            if [ ! -e "$target" ]; then
+              mkdir -p "$(dirname "$target")" && mv "$link" "$target"
+            elif [ -f "$link" ] && [ -f "$target" ]; then
+              # Replaced by a tool that saves by rename: its version wins (git has the old one).
+              cmp -s "$link" "$target" || cp "$link" "$target"
+              rm "$link"
+            else
+              d=/home/eldar/.claude/.displaced/$(date +%Y%m%dT%H%M%S)
+              mkdir -p "$d" && mv "$link" "$d/"
+            fi
+          fi
+          if [ -e "$target" ] && [ "$(readlink "$link")" != "$target" ]; then
+            mkdir -p "$(dirname "$link")" && ln -sfn "$target" "$link"
+          fi
+        '') cfg.claudeLinks);
+      };
+    };
+    # Re-link as soon as one of them is replaced.
+    systemd.paths.claude-links = lib.mkIf (cfg.claudeLinks != { }) {
+      wantedBy = [ "multi-user.target" ];
+      pathConfig.PathChanged = lib.mapAttrsToList (link: _: "/home/eldar/.claude/${link}") cfg.claudeLinks;
+    };
   };
   };
 }
