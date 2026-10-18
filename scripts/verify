@@ -29,7 +29,9 @@ sudo test -f /boot/EFI/BOOT/BOOTX64.EFI || fail "no fallback bootloader"; ok "fa
 
 if [ -e /dev/kvm ]; then
   systemctl is-active --quiet microvm@eldar || fail "Eldar's VM isn't running"
-  timeout 60 bash -c 'until ping -c1 -W1 10.42.0.2 >/dev/null 2>&1; do sleep 2; done' || fail "Eldar's VM isn't answering"
+  timeout 60 bash -c 'until ping -c1 -W1 10.42.0.2 >/dev/null 2>&1; do sleep 2; done' \
+    || { sudo journalctl -b -u microvm@eldar -u microvm-virtiofsd@eldar -u microvm-tap-interfaces@eldar --no-pager -o short-monotonic | tail -40
+         fail "Eldar's VM isn't answering"; }
   ok "Eldar's VM up"
 else
   ok "Eldar's VM skipped (no KVM here)"
