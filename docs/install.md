@@ -234,3 +234,10 @@ The bootloader is at the firmware's fallback path (`\EFI\BOOT\BOOTX64.EFI`) on
 the 500GB disk's own ESP; no NVRAM entry is written. Pick the 970 EVO 500GB
 from the firmware boot menu. There's no key disk there, so after 5 s the initrd
 asks for Ben's passphrase. The Ubuntu disk and its ESP are untouched.
+
+Ubuntu's root is then mounted read-only at `/mnt/ubuntu`
+(`hosts/eldar-os/ubuntu-disk.nix`). Its LUKS partition has an extra keyslot
+for the sops secret `ubuntu-disk-key`, added once from Ubuntu with
+`sudo cryptsetup luksAddKey <the 1TB disk's by-id path>-part3 <key file>`; the
+passphrase still unlocks it. In the VM the drive is absent and the mount is
+skipped.

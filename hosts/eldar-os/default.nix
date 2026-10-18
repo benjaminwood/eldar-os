@@ -8,5 +8,6 @@
     ./eldar-vm.nix
     ./supervisor.nix
     ./tailscale.nix
+    ./ubuntu-disk.nix
   ];
 }
