@@ -37,7 +37,7 @@ OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS_TEMPLATE=/usr/share/OVMF/OVMF_VARS_4M.fd
 SSH_KEY=$HOME/.ssh/eldar-os-vm
 CPUS=${VM_CPUS:-8}
-MEM=${VM_MEM:-12G}
+MEM=${VM_MEM:-40G} # of the old host's 60 GB: Eldar's VM inside runs the projects' dev stacks
 
 if [ "${1:-}" = --dry-run ]; then
   shift
