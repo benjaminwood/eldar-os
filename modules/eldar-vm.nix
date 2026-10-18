@@ -385,10 +385,11 @@ in
         '') cfg.claudeLinks);
       };
     };
-    # Re-link as soon as one of them is replaced.
-    systemd.paths.claude-links = lib.mkIf (cfg.claudeLinks != { }) {
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = lib.mapAttrsToList (link: _: "/home/eldar/.claude/${link}") cfg.claudeLinks;
+    # Re-link within a minute of one being replaced. (A path unit can't see
+    # it: inotify on a link watches its target, which a rename leaves alone.)
+    systemd.timers.claude-links = lib.mkIf (cfg.claudeLinks != { }) {
+      wantedBy = [ "timers.target" ];
+      timerConfig = { OnActiveSec = "1min"; OnUnitActiveSec = "1min"; AccuracySec = "5s"; };
     };
   };
   };
