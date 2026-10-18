@@ -260,6 +260,13 @@ in
       group = "eldar-ws";
       linger = true; # its user services (rootless Docker, agents) run without a login
       openssh.authorizedKeys.keys = config.users.users.ben.openssh.authorizedKeys.keys;
+      # Fixed subordinate ids: rootless Docker stores every image and volume
+      # file under them. The VM's root (and /etc/subuid) is rebuilt each boot,
+      # and automatic allocation can hand eldar's range to ben on the next one,
+      # leaving all of Docker's data owned by someone else.
+      autoSubUidGidRange = false;
+      subUidRanges = [{ startUid = 165536; count = 65536; }];
+      subGidRanges = [{ startGid = 165536; count = 65536; }];
     };
     # Privileged: Ben's admin identity inside the VM. sudo needs a password
     # (not set yet), so nothing gets root without Ben.
@@ -268,6 +275,9 @@ in
       uid = 1000;
       extraGroups = [ "wheel" "eldar-ws" ];
       openssh.authorizedKeys.keys = config.users.users.ben.openssh.authorizedKeys.keys;
+      autoSubUidGidRange = false; # fixed too, clear of eldar's (above)
+      subUidRanges = [{ startUid = 100000; count = 65536; }];
+      subGidRanges = [{ startGid = 100000; count = 65536; }];
     };
     services.openssh = {
       enable = true;
