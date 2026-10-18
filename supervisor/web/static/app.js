@@ -230,10 +230,12 @@ function render() {
 
 function renderChrome() {
   const d = S.data;
-  $("#conn").className = "conn" + (S.live ? " live" : "");
-  $("#conn").title = S.live ? "Live" : "Reconnecting… " + (S.downMsg || "");
+  // Settings' gear carries the connection state: a red mark while reconnecting.
+  $("#settings-btn").classList.toggle("offline", !S.live);
+  $("#settings-btn").title = S.live ? "Settings" : "Settings · reconnecting… " + (S.downMsg || "");
   const navTab = S.tab === "activity" ? "settings" : S.tab;
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === navTab));
+  $("#settings-btn").classList.toggle("on", navTab === "settings");
   if (!d) return;
   const pill = $("#mode-pill");
   if (d.mode === "bypass") {

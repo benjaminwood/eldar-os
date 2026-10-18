@@ -68,8 +68,11 @@ code, pre, .mono { font-family: var(--mono); }
   color: var(--lavender); border: 1px solid var(--line); background: var(--surface);
 }
 .icon-btn.on { color: var(--mint); }
-.conn { width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); }
-.conn.live { background: var(--mint); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 22%, transparent); }
+.settings-btn { position: relative; }
+.settings-btn .count:empty { display: none; }
+.settings-btn .count { position: absolute; top: -6px; right: -6px; }
+.settings-btn.offline::after { content: ""; position: absolute; bottom: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red); box-shadow: 0 0 0 2px var(--bg); }
 
 .mode-pill {
   height: 32px; padding: 0 12px; border-radius: 999px; font-weight: 700; font-size: 12px; letter-spacing: .06em;
@@ -83,7 +86,7 @@ code, pre, .mono { font-family: var(--mono); }
 /* ── navigation: bottom bar on phones, rail on wide screens ─────────── */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; /* one row, however many tabs show */
   height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -110,7 +113,7 @@ main { max-width: 860px; margin: 0 auto; padding: 16px; outline: none; }
   body { padding-bottom: 32px; padding-left: 220px; }
   .tabs {
     top: 0; bottom: 0; right: auto; width: 220px; height: auto; padding: 88px 12px 12px;
-    grid-template-columns: none; grid-auto-rows: 48px; align-content: start; gap: 4px;
+    grid-template-columns: none; grid-auto-flow: row; grid-auto-rows: 48px; align-content: start; gap: 4px;
     border-top: 0; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 60%, transparent);
     z-index: 19;
   }
@@ -325,8 +328,6 @@ main { max-width: 860px; margin: 0 auto; padding: 16px; outline: none; }
 .switch.on { background: color-mix(in srgb, var(--mint) 30%, transparent); border-color: var(--mint); }
 .switch.on i { transform: translateX(18px); background: var(--mint); }
 
-/* five tabs on phones (the rail on wide screens is a single column) */
-@media (max-width: 899px) { .tabs { grid-template-columns: repeat(5, 1fr); } }
 @media (max-width: 380px) { .tabs button span { font-size: 10px; } }
 
 /* session sheet actions: primary on its own row, the rest share one */
@@ -477,7 +478,6 @@ body { font: 13.5px/1.55 var(--font); letter-spacing: -0.01em; }
 .sub::before { content: "~/"; color: var(--faint); }
 .icon-btn { border-radius: 4px; width: 34px; height: 34px; }
 .mode-pill { border-radius: 3px; height: 28px; font-size: 11.5px; padding: 0 10px; letter-spacing: .08em; }
-.conn { border-radius: 2px; }
 
 /* headings with prompt glyphs */
 .section-head h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
