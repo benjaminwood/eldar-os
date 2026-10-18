@@ -29,6 +29,15 @@ step "boot installer"
 $VM install
 $VM authorize
 
+# The installer has no swap, and nixos-install evaluates eldar-os and Eldar's
+# VM in one nix process while it builds: more than a small VM (CI's 5G)
+# holds, so it thrashes until the OOM killer ends the install. Compressed
+# swap in RAM, as the installed system has (zramSwap), gives it the room.
+step "installer swap"
+VM_USER=nixos $VM ssh 'set -e; sudo modprobe zram
+  dev=$(sudo zramctl -f -a zstd -s "$(awk "/MemTotal/ { print \$2 }" /proc/meminfo)K")
+  sudo mkswap -q "$dev" && sudo swapon -p 100 "$dev" && free -m'
+
 step "install"
 git ls-files -co --exclude-standard | tar -cf - -T - | VM_USER=nixos $VM ssh 'rm -rf eldar-os && mkdir eldar-os && tar -xf - -C eldar-os'
 VM_USER=nixos $VM ssh 'sudo bash eldar-os/scripts/install.sh'
