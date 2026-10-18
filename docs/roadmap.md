@@ -73,7 +73,6 @@ jobs. Done last.
 - [ ] ~~MCP OAuth~~: not porting for now. Cron auto-approval stays unused (the
       code exists; no crons are authorized)
 - [ ] A replacement for `suben` / the secrets-dump socket
-- [ ] Forwarder for Claude's own API credentials (later: per-request policy)
 
 ## 4. Networking and services
 
@@ -109,5 +108,4 @@ jobs. Done last.
       filling the form by hand
 
 - [ ] Run `scripts/e2e` again (last run predates chat and in-place updates)
-- [ ] Publish staging to the public repo
 - [ ] Merge the dotfiles `eldar-os` branch
