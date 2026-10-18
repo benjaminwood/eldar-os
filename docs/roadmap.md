@@ -44,11 +44,14 @@ The workspace (`/srv/eldar/workspace`, Eldar's `~/workspace`) is what Eldar
 changes freely: persona, skills, memory, notes, its projects and MCPs, cron
 jobs. Done last.
 
-- [ ] Version control and an off-machine copy: the workspace as its own private
-      repo, and `~/.claude` (sessions, memory, settings) too; options to weigh
-      then (legacy Eldar symlinks files into place)
-
-- [ ] Persona (`CLAUDE.md`), skills, projects, helper scripts
+- [x] The workspace is its own private repo, tracking Eldar's identity and
+      Claude settings; `claudeLinks` puts the user-level ones in `~/.claude`
+- [ ] An off-machine copy of everything else (sessions, project data):
+      encrypted snapshots
+- [x] Persona and instructions, rewritten for eldar-os
+- [x] The workspace's files, projects and their dev stacks moved over; the
+      stacks run in Eldar's rootless Docker
+- [ ] Skills and helper scripts ported (they still assume the Docker stack)
 - [ ] Cron jobs (`jobs.json`) under supercronic, or systemd timers
 - [x] Chat and relay channels, `notify_ben`, `supervisor notify` and
       `tell-agent` in the supervisor (no longer workspace code)
@@ -92,10 +95,12 @@ jobs. Done last.
 - [ ] Desktop for Ben
 - [ ] Remove passwordless sudo
 - [ ] Raise Eldar's VM to full size (24 vCPU / 56 GB)
-- [ ] Move today's Eldar state: Claude sessions and `.claude`, chat history,
-      memory
+- [x] Move today's Eldar state: Claude sessions, memory, scratch files, shell
+      history
+- [ ] The Docker stack's chat history into the supervisor
 - [x] The web UI is `supervisor` and Chrome is `eldar-chrome` on the tailnet
-- [ ] Retire the Docker stack
+- [x] The Docker stack is stopped and off the tailnet (its files stay on the
+      old host's disk)
 
 ## Cycle time (0012)
 
