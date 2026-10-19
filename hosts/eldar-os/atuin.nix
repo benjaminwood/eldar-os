@@ -1,0 +1,62 @@
+# Atuin's sync server: shell history for Ben's machines and Eldar's VM, in
+# Docker on the host (docs/decisions/0014-host-docker.md). Machine-specific:
+# a fork drops this file.
+#
+# History is encrypted on each client with the user's key; the server only
+# stores ciphertext. Reachable from the host itself, Ben's tailnet devices and Eldar's
+# VM, not the LAN. Registration is closed: accounts already exist.
+#
+# Postgres is on Docker's bridge, published on localhost only, so connections
+# reach it from the bridge and need the password (the data directory trusts
+# 127.0.0.1 inside the container). Atuin uses host networking so the host
+# firewall alone decides who reaches it.
+#
+# State lives in /var/lib/atuin, never in this repo: the database in
+# postgres/, and env with ATUIN_DB_URI (it holds the database password).
+# docs/install.md has the commands that moved both here from the previous OS.
+#
+# Images are pinned by digest. Upgrading is a commit that changes them; take
+# a pg_dump first (docs/install.md).
+{ config, ... }:
+let
+  port = 8888;
+in
+{
+  virtualisation.oci-containers.containers = {
+    atuin-postgres = {
+      image = "postgres@sha256:eecfb2ab484dadaae790866c9e5090a67deeee76417f072786569bea03f53e3f"; # 14.8
+      volumes = [ "/var/lib/atuin/postgres:/var/lib/postgresql/data" ];
+      ports = [ "127.0.0.1:5432:5432" ];
+    };
+    atuin = {
+      image = "ghcr.io/atuinsh/atuin@sha256:8a2913344e9f2e5786337d1c2570579bea44176dec0f24e2ef934f0dda7959fe"; # 18.0.0
+      cmd = [ "server" "start" ];
+      environment = {
+        ATUIN_HOST = "0.0.0.0";
+        ATUIN_PORT = toString port;
+        ATUIN_OPEN_REGISTRATION = "false";
+      };
+      environmentFiles = [ "/var/lib/atuin/env" ];
+      dependsOn = [ "atuin-postgres" ];
+      extraOptions = [ "--network=host" ];
+    };
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /var/lib/atuin 0700 root root -"
+    "d /var/lib/atuin/postgres 0700 999 999 -" # the image's postgres user
+  ];
+
+  # Ben's devices reach it as its own tailnet node, https://atuin.<tailnet>
+  # (modules/tailnet-proxy.nix): never through the host's tailnet address.
+  eldar-os.tailnetProxies.atuin = {
+    hostname = "atuin";
+    target = "http://127.0.0.1:${toString port}";
+    environmentFile = config.sops.secrets.supervisor-web-env.path; # the allowed tailnet login
+  };
+  eldar-os.eldarVm.hostPorts = [ port ];
+
+  eldar-os.apply.healthChecks = [
+    "systemctl is-active --quiet docker-atuin-postgres docker-atuin"
+  ];
+}

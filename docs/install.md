@@ -239,6 +239,34 @@ sudo systemctl start docker-homeassistant
 Keep the image tag at the version that wrote the state (`.HA_VERSION` in it)
 for the first start, then upgrade by changing the tag.
 
+## 12. Atuin's database (once, from the previous OS)
+
+`hosts/eldar-os/atuin.nix` runs Atuin's sync server against Postgres data in
+`/var/lib/atuin/postgres` and reads its database URL from `/var/lib/atuin/env`.
+On this machine both came from the previous Ubuntu install's Docker Compose
+project (a `postgres:14` volume, and the database credentials in its `.env`).
+Same Postgres major version, so the data directory is copied as is:
+
+```bash
+sudo systemctl stop docker-atuin docker-atuin-postgres   # if already running
+sudo rsync -aHAX --numeric-ids /mnt/ubuntu/var/lib/docker/volumes/atuin_database/_data/ /var/lib/atuin/postgres/
+sudo sh -c 'set -a; . /mnt/ubuntu/home/ben/projects/atuinsh/atuin/.env; umask 077
+  printf "ATUIN_DB_URI=postgres://%s:%s@127.0.0.1:5432/atuin\n" "$ATUIN_DB_USERNAME" "$ATUIN_DB_PASSWORD" > /var/lib/atuin/env'
+sudo systemctl start docker-atuin-postgres docker-atuin
+curl -s http://127.0.0.1:8888/    # version and total_history
+```
+
+Its tailnet node (`atuin`) needs a single-use auth key for its tag in
+`/var/lib/tailnet-proxy-atuin/authkey`, as in step 10.
+
+Before changing either image, dump the database (the data directory itself
+can't be downgraded once a newer Atuin migrates it):
+
+```bash
+U=$(sudo sh -c '. /var/lib/atuin/env; echo "$ATUIN_DB_URI"' | sed -E 's#^postgres://([^:]+):.*#\1#')
+sudo docker exec atuin-postgres pg_dump -U "$U" -Fc atuin | sudo tee /var/lib/atuin/atuin-$(date +%F).dump >/dev/null
+```
+
 ## Changing the system
 
 ```bash

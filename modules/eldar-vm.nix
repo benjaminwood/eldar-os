@@ -29,6 +29,11 @@ in
     address = lib.mkOption { type = lib.types.str; default = "10.42.0.2"; readOnly = true; };
     hostAddress = lib.mkOption { type = lib.types.str; default = "10.42.0.1"; readOnly = true; };
     supervisorPort = lib.mkOption { type = lib.types.port; default = 9100; readOnly = true; };
+    hostPorts = lib.mkOption {
+      type = lib.types.listOf lib.types.port;
+      default = [ ];
+      description = "Other TCP ports on the host (at hostAddress) that Eldar's VM may reach, for services shared with it.";
+    };
     vcpu = lib.mkOption {
       type = lib.types.ints.positive;
       description = "vCPUs. They're scheduled, not reserved: give Eldar all of the host's threads.";
@@ -120,11 +125,12 @@ in
   networking.nftables.tables.eldar-vm = {
     family = "inet";
     content = ''
-      # Eldar reaches the host only on the supervisor's port.
+      # Eldar reaches the host only on the supervisor's port, and on any
+      # hostPorts a host config shares with it.
       chain input {
         type filter hook input priority filter - 1; policy accept;
         iifname "vm-eldar" ct state established,related accept
-        iifname "vm-eldar" tcp dport ${toString supervisorPort} accept
+        iifname "vm-eldar" tcp dport { ${lib.concatMapStringsSep ", " toString ([ supervisorPort ] ++ cfg.hostPorts)} } accept
         iifname "vm-eldar" icmp type echo-request accept
         iifname "vm-eldar" drop
       }

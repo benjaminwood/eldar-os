@@ -11,5 +11,6 @@
     ./ubuntu-disk.nix
     ./docker.nix
     ./home-assistant.nix
+    ./atuin.nix
   ];
 }
