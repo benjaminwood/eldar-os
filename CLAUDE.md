@@ -51,14 +51,14 @@ may push to staging `main` directly; commits are signed with
 1. Edit, then `scripts/try` (~7 s): activates the working tree on this
    machine, uncommitted, with `nixos-rebuild test`; the boot default stays the last
    applied main. Iterate here. (`scripts/check` builds and diffs without
-   activating; `scripts/check --lock` after adding or bumping an input.)
+   activating; `scripts/check --lock` after adding an input, `--lock <input>` to bump one.)
 2. When it's right, commit (signed automatically) and `scripts/apply` (~11 s):
    pushes and streams the machine's own apply. A failed health check rolls
    back on its own.
 3. Small, frequent commits are fine; they're rewritable until published.
    Ben's preferences live in his dotfiles repo (decision 0006): try them
    with `DOTFILES=~/projects/benjaminwood/dotfiles scripts/try`, push the
-   dotfiles commit, then `scripts/check --lock` to bump the pin.
+   dotfiles commit, then `scripts/check --lock dotfiles` to bump the pin.
 4. Don't stack blocking waits on long operations; check state directly.
 5. Never restart Eldar's VM or herdr to apply a change: changes reach the VM
    in place (decision 0010). Services that hold work (herdr, rootless Docker)

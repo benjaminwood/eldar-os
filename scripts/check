@@ -3,13 +3,16 @@
 # change against the running system. Catches mistakes before a push; the build
 # lands in the store, so the real apply is quick.
 #
-#   scripts/check            build and diff
-#   scripts/check --lock     also update flake.lock for new/changed inputs
+#   scripts/check                    build and diff
+#   scripts/check --lock             also lock new inputs in flake.lock
+#   scripts/check --lock <input>...  also update those inputs to their latest
+#                                    (e.g. dotfiles, after pushing a commit)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ "${1:-}" = --lock ]; then
-  nix flake lock
+  shift
+  if [ $# -gt 0 ]; then nix flake update "$@"; else nix flake lock; fi
   git diff --stat flake.lock
 fi
 

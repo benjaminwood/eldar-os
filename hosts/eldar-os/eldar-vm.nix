@@ -188,7 +188,7 @@
 
     environment.systemPackages = with pkgs; [
       # general
-      git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file yq-go tokei
+      git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file yq-go tokei atuin
       # runtimes
       nodejs_22 typescript eslint bun go
       (python3.withPackages (ps: with ps; [ numpy scipy pillow rectpack ]))

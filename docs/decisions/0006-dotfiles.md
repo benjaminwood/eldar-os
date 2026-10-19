@@ -28,7 +28,7 @@ arbitrary containers, so chezmoi would stay anyway.
 ## Consequences
 
 Changing a preference is a commit in the dotfiles repo, then a pin bump here
-(`scripts/check --lock`). `DOTFILES=<checkout> scripts/try` tries a local,
+(`scripts/check --lock dotfiles`). `DOTFILES=<checkout> scripts/try` tries a local,
 uncommitted dotfiles tree without either. Dotfiles are applied and health-
 checked with the system, but rolling back the system doesn't un-place files;
 reverting the dotfiles commit does. Because the repo is public and pinned
