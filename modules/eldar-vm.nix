@@ -18,6 +18,41 @@ let
   eldarUid = 1500;
   workspaceGid = 1500; # same number on host and in the VM, so group perms line up
   supervisor = config.eldar-os.supervisor.package; # its `mcp` subcommand is the agents' client
+  # gh in the VM gets a token the way git does: the repo owner's ambient token,
+  # or Eldar's App (decision 0015). Packaged, not kept in the workspace, so
+  # nothing in the VM can change what runs with a token.
+  gh = pkgs.symlinkJoin {
+    name = "gh-with-supervisor-${pkgs.gh.version}";
+    paths = [ pkgs.gh ];
+    postBuild = ''
+      rm $out/bin/gh
+      install -m755 ${pkgs.writeShellScript "gh" ''
+        # A token chosen deliberately (an approved exec, or by hand) stands, and
+        # gh auth manages its own credentials.
+        if [ -n "''${GH_TOKEN:-}''${GITHUB_TOKEN:-}" ] || [ "''${1:-}" = auth ]; then
+          exec ${pkgs.gh}/bin/gh "$@"
+        fi
+        owner_of() { local s=''${1#*github.com[:/]}; printf '%s' "''${s%%/*}"; }
+        owner=
+        prev=
+        for a in "$@"; do  # --repo/-R, as gh itself resolves it
+          case "$prev" in -R|--repo) owner=$(owner_of "$a"); break ;; esac
+          case "$a" in --repo=*) owner=$(owner_of "''${a#--repo=}"); break ;; -R?*) owner=$(owner_of "''${a#-R}"); break ;; esac
+          prev=$a
+        done
+        [ -n "$owner" ] || [ -z "''${GH_REPO:-}" ] || owner=$(owner_of "$GH_REPO")
+        if [ -z "$owner" ] && [ "''${1:-}" = api ]; then  # repos/<owner>/..., orgs/<owner>, users/<owner>
+          for a in "$@"; do
+            if [[ "$a" =~ (^|/)(repos|orgs|users)/([^/]+) ]]; then owner=''${BASH_REMATCH[3]}; break; fi
+          done
+        fi
+        [ -n "$owner" ] || owner=$(owner_of "$(${pkgs.git}/bin/git remote get-url origin 2>/dev/null)")
+        GH_TOKEN=$(${supervisor}/bin/supervisor github-token "$owner") || unset GH_TOKEN
+        export GH_TOKEN
+        exec ${pkgs.gh}/bin/gh "$@"
+      ''} $out/bin/gh
+    '';
+  };
   mcpServers = lib.mapAttrs (_: s: { type = "stdio"; args = [ ]; env = { }; } // s) ({
     supervisor = { command = "/run/current-system/sw/bin/supervisor"; args = [ "mcp" ]; };
     # Drive a browser profile on Ben's machines (asks Ben per window).
@@ -333,13 +368,28 @@ in
     # where Eldar can't change it. A guest firewall adds nothing, and NixOS's
     # (strict reverse-path filter, input rules) breaks Docker's TCP egress.
     networking.firewall.enable = false;
-    environment.systemPackages = (with pkgs; [ git curl jq ]) ++ [ supervisor ];
-    # git reaches GitHub as Eldar's GitHub App: a token from the supervisor
-    # (branches and PRs on the staging repo; only Ben merges). gh takes one
-    # with GH_TOKEN=$(supervisor github-token).
+    environment.systemPackages = (with pkgs; [ git curl jq ]) ++ [ supervisor (lib.hiPrio gh) ];
+    # git gets GitHub tokens from the supervisor: the repo owner's ambient token
+    # if the private ambient.yaml lists one, otherwise Eldar's GitHub App
+    # (branches and PRs on the staging repo; only Ben merges). useHttpPath
+    # gives the helper the owner. Docs: decisions 0011 and 0015.
     programs.git = {
       enable = true;
-      config.credential."https://github.com".helper = "/run/current-system/sw/bin/supervisor git-credential";
+      config.credential."https://github.com" = {
+        helper = "/run/current-system/sw/bin/supervisor git-credential";
+        useHttpPath = true;
+      };
+    };
+    # Ambient environment variables: an .envrc says `use supervisor`, and gets
+    # what ambient.yaml lists for its directory and those above it. The
+    # workspace's .envrc files are trusted without `direnv allow`.
+    programs.direnv = {
+      enable = true;
+      silent = true;
+      direnvrcExtra = ''
+        use_supervisor() { eval "$(${supervisor}/bin/supervisor env "$PWD")"; }
+      '';
+      settings.whitelist.prefix = [ "/home/eldar/workspace" ];
     };
     # MCP servers, in two layers:
     #   eldar-os's (cfg.mcpServers, the supervisor's always): written into each

@@ -68,6 +68,16 @@ in
         signs in itself (`supervisor aws-login`, approved by Ben in a browser).
       '';
     };
+    ambientFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        The credentials agents in Eldar's VM get without asking: environment
+        variables by directory, GitHub tokens by repo owner, named from the
+        profiles' 1Password Environments (docs/decisions/0015-ambient-credentials.md).
+        Private, so not in this repo. Re-read on every request.
+      '';
+    };
     runAs = lib.mkOption {
       type = lib.types.str;
       default = "ben";
@@ -171,6 +181,8 @@ in
         HOME = state;
       } // lib.optionalAttrs (cfg.hostsFile != null) {
         SUPERVISOR_HOSTS = cfg.hostsFile;
+      } // lib.optionalAttrs (cfg.ambientFile != null) {
+        SUPERVISOR_AMBIENT = cfg.ambientFile;
       } // lib.optionalAttrs (cfg.awsConfig != null) {
         SUPERVISOR_AWS_CONFIG = cfg.awsConfig;
       };

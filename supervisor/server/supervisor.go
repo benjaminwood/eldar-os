@@ -51,6 +51,7 @@ type Config struct {
 	HostAllowPath             string
 	AwsConfigPath             string // ~/.aws/config-style profiles; "" = no AWS
 	AwsStateDir               string
+	AmbientPath               string // what agents get without asking (ambient.go); "" = nothing
 }
 
 // Supervisor holds all state and serves both APIs.
@@ -76,6 +77,7 @@ type Supervisor struct {
 	browsers    *Browsers
 	aws         *AWS
 	browserPins KeyPins
+	ambient     *Ambient
 	termSSH     TerminalSSH
 	runner      interface {
 		Runner
@@ -118,6 +120,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		hostAllow:      NewHostAllow(cfg.HostAllowPath),
 		browsers:       NewBrowsers(),
 		aws:            NewAWS(cfg.AwsConfigPath, cfg.AwsStateDir),
+		ambient:        NewAmbient(cfg.AmbientPath, "/home/"+cfg.AgentUser),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil

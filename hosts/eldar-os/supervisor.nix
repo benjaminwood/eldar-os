@@ -11,6 +11,7 @@
     hostsFile = "/var/lib/eldar-os/secrets/supervisor/hosts.json";
     # AWS profiles (one SSO session; `supervisor aws-login` signs in).
     awsConfig = "/var/lib/eldar-os/secrets/supervisor/aws-config";
+    ambientFile = "/var/lib/eldar-os/secrets/supervisor/ambient.yaml";
     web = {
       enable = true;
       hostname = "supervisor";

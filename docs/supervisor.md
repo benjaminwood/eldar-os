@@ -31,6 +31,7 @@ they share). Nix: `modules/supervisor.nix`, configured in
 | TUI | `supervisor` (as a member of `supervisor-admin`) |
 | Web UI | `supervisor-web.service`, its own tailnet node; first start needs a one-time auth key in `/var/lib/supervisor-web/authkey` (tagged for the UI) |
 | Policy | `/var/lib/eldar-os/secrets/supervisor/policy.yaml` (private repo), re-read per request |
+| Ambient credentials | `/var/lib/eldar-os/secrets/supervisor/ambient.yaml` (private repo), re-read per request |
 | Credentials config | sops secret `supervisor-env`: `OP_ACCOUNT_*_TOKEN`, `OP_PROFILE_*_ACCOUNT`, `OP_PROFILE_*_ENV` |
 
 Develop: `scripts/go test ./...`, then `scripts/try` (the Nix build runs the
@@ -144,8 +145,30 @@ new process); while a stream is open, only its key is accepted.
 GitHub App, limited to the repos in `SUPERVISOR_GITHUB_REPOS`, made from the
 App's key (`SUPERVISOR_GITHUB_APP_KEY`) and cached until ten minutes before
 it expires. No approval; each new token is audited. In the VM, git uses it
-through `supervisor git-credential` (system git config) and gh through
-`GH_TOKEN=$(supervisor github-token)`. Why: `docs/decisions/0011-eldar-github-app.md`.
+through `supervisor git-credential` (system git config) and gh through a
+wrapper that sets `GH_TOKEN=$(supervisor github-token <owner>)`. Both prefer
+an owner's ambient token (below) when there is one. Why:
+`docs/decisions/0011-eldar-github-app.md`.
+
+## Ambient credentials
+
+What agents get without asking, named in `ambient.yaml` next to the policy
+(`SUPERVISOR_AMBIENT`, re-read per request) and fetched from the profiles'
+1Password Environments. Format: `supervisor/server/ambient.go`. Why:
+`docs/decisions/0015-ambient-credentials.md`.
+
+- `GET /ambient/env?dir=<path>`: environment variables for a directory in the
+  VM, from every rule covering it (deeper ones win). Variables a profile
+  lacks come back in `missing`. In the VM: `use supervisor` in an `.envrc`
+  (direnv is hooked into the shells, and trusts the workspace's `.envrc`s);
+  `supervisor env [DIR]` prints the exports by hand.
+- `GET /ambient/git?owner=<owner>`: an owner's GitHub token, or 404. git's
+  helper sends the owner (system `credential.useHttpPath`). An explicit
+  `$GITHUB_TOKEN` (an approved exec) is used before either.
+
+Both are audited, the same fetch at most hourly, and refused in lockdown.
+After adding a value to a profile's Environment, clear that profile's cache
+(TUI or web UI) so the supervisor reads it again.
 
 ## Telling a session its PR is live
 

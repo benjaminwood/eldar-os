@@ -13,8 +13,10 @@
 //	                   one-way event to Eldar from a script or cron (or stdin)
 //	supervisor tell-agent PANE SESSION MESSAGE
 //	                   Eldar passes Ben's answer to another Claude session
-//	supervisor git-credential, supervisor github-token
-//	                   GitHub as Eldar's App, for git and gh in the VM
+//	supervisor git-credential, supervisor github-token [OWNER]
+//	                   GitHub for git and gh in the VM: an owner's ambient token, or Eldar's App
+//	supervisor env [DIR]
+//	                   the ambient environment variables for DIR, for direnv
 //
 // The UIs talk to the admin socket, which only the supervisor-admin group can
 // open; the agent isn't in it.
@@ -92,7 +94,11 @@ func main() {
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "github-token" {
-		runGitHubToken()
+		runGitHubToken(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "env" {
+		runEnv(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
