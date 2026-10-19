@@ -264,6 +264,11 @@ in
       isNormalUser = true;
       uid = eldarUid;
       group = "eldar-ws";
+      # ben (in eldar-ws) works in eldar's ~/workspace, and the supervisor runs
+      # agents' commands as ben, so the home must stay group-traversable. NixOS
+      # chmods a home to homeMode (default 700) on every switch, which undid the
+      # tmpfiles rule below after each in-place update (decision 0010).
+      homeMode = "750";
       linger = true; # its user services (rootless Docker, agents) run without a login
       openssh.authorizedKeys.keys = config.users.users.ben.openssh.authorizedKeys.keys;
       # Fixed subordinate ids: rootless Docker stores every image and volume
