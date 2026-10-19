@@ -17,7 +17,7 @@
 #
 # Images are pinned by digest. Upgrading is a commit that changes them; take
 # a pg_dump first (docs/install.md).
-{ config, ... }:
+{ config, pkgs, ... }:
 let
   port = 8888;
 in
@@ -29,8 +29,10 @@ in
       ports = [ "127.0.0.1:5432:5432" ];
     };
     atuin = {
-      image = "ghcr.io/atuinsh/atuin@sha256:8a2913344e9f2e5786337d1c2570579bea44176dec0f24e2ef934f0dda7959fe"; # 18.0.0
-      cmd = [ "server" "start" ];
+      image = "ghcr.io/atuinsh/atuin@sha256:b9a8369b4016dddcd90d23906f1d63dd883f459c6aaecec3be87cf481e8ac88d"; # 18.24.1
+      # The server has been its own binary since 18.12 (`server start` before).
+      # 18.18 dropped the v1 sync API: history must be in the record store.
+      cmd = [ "start" ];
       environment = {
         ATUIN_HOST = "0.0.0.0";
         ATUIN_PORT = toString port;
@@ -58,5 +60,6 @@ in
 
   eldar-os.apply.healthChecks = [
     "systemctl is-active --quiet docker-atuin-postgres docker-atuin"
+    "${pkgs.curl}/bin/curl -sf --retry 10 --retry-connrefused --retry-delay 2 http://127.0.0.1:${toString port}/healthz"
   ];
 }
