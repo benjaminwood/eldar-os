@@ -48,8 +48,8 @@ The machine applies staging `main` itself, and only if every commit it gained
 may push to staging `main` directly; commits are signed with
 `~/.ssh/eldar-os-signing` (configured in this repo's git config).
 
-1. Edit, then `scripts/try` (~7 s): activates the working tree in the VM,
-   uncommitted, with `nixos-rebuild test`; the boot default stays the last
+1. Edit, then `scripts/try` (~7 s): activates the working tree on this
+   machine, uncommitted, with `nixos-rebuild test`; the boot default stays the last
    applied main. Iterate here. (`scripts/check` builds and diffs without
    activating; `scripts/check --lock` after adding or bumping an input.)
 2. When it's right, commit (signed automatically) and `scripts/apply` (~11 s):

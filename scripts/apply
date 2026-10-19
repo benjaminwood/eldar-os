@@ -15,8 +15,9 @@ if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
   echo "pushed $(git rev-parse --short HEAD)"
 fi
 
-scripts/vm ssh 'journalctl -fu eldar-os-apply -n0 -o cat & j=$!
-  systemctl start eldar-os-apply.service; rc=$?
-  sleep 1; kill $j
-  echo "result: $(systemctl show eldar-os-apply.service -p Result --value)"
-  exit $rc'
+# Starting the unit is allowed for ben by polkit (modules/apply, triggerUsers).
+journalctl -fu eldar-os-apply -n0 -o cat & j=$!
+rc=0; systemctl start eldar-os-apply.service || rc=$?
+sleep 1; kill $j
+echo "result: $(systemctl show eldar-os-apply.service -p Result --value)"
+exit $rc
