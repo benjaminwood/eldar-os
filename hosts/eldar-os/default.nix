@@ -9,5 +9,7 @@
     ./supervisor.nix
     ./tailscale.nix
     ./ubuntu-disk.nix
+    ./docker.nix
+    ./home-assistant.nix
   ];
 }

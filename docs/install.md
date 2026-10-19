@@ -220,6 +220,24 @@ node a single-use auth key for its tag:
 
 Restart the service (for the host, apply); it registers and deletes the key.
 
+## 11. Home Assistant's state (once, from the previous OS)
+
+`hosts/eldar-os/home-assistant.nix` runs Home Assistant against
+`/var/lib/homeassistant`, which starts out empty. Copy the old install's config
+directory there before its first start, or it starts a fresh setup. On this
+machine it came from the previous Ubuntu install's Docker container, still
+readable at `/mnt/ubuntu` (`hosts/eldar-os/ubuntu-disk.nix`):
+
+```bash
+sudo systemctl stop docker-homeassistant   # if it's already running
+sudo rsync -aHAX /mnt/ubuntu/home/ben/.config/homeassistant/ /var/lib/homeassistant/
+sudo chmod 700 /var/lib/homeassistant
+sudo systemctl start docker-homeassistant
+```
+
+Keep the image tag at the version that wrote the state (`.HA_VERSION` in it)
+for the first start, then upgrade by changing the tag.
+
 ## Changing the system
 
 ```bash

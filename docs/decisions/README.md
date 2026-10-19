@@ -22,3 +22,4 @@ the old one *Superseded by NNNN*. Don't rewrite history.
 | [0011](0011-eldar-github-app.md) | Eldar works on GitHub as its own App; only Ben merges | Accepted |
 | [0012](0012-cycle-time.md) | An agent waits only for Ben's approval | Accepted |
 | [0013](0013-approvals-and-grants.md) | Each credentialed command is approved on its own, until Ben grants more | Accepted |
+| [0014](0014-host-docker.md) | Household services run in rootful Docker on the host | Accepted |
