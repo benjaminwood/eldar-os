@@ -18,7 +18,7 @@
     tree
     xxd # used by code-remote in .zshrc
     (callPackage ../../packages/herdr.nix { }) # same build as Eldar's VM
-    atuin # shell history sync; the server is atuin.nix, the address comes from the dotfiles
+    (callPackage ../../packages/atuin.nix { }) # shell history sync; server in atuin.nix, address from the dotfiles
   ];
 
   # Claude Code on the host, for Ben working on the system itself; installed

@@ -24,7 +24,7 @@ in
 {
   virtualisation.oci-containers.containers = {
     atuin-postgres = {
-      image = "postgres@sha256:eecfb2ab484dadaae790866c9e5090a67deeee76417f072786569bea03f53e3f"; # 14.8
+      image = "postgres@sha256:14bfab572eec6abf65892e1db7c3ba8d41b2a2855c1b143664907d6e146eb6e1"; # 14.24 (Debian 13)
       volumes = [ "/var/lib/atuin/postgres:/var/lib/postgresql/data" ];
       ports = [ "127.0.0.1:5432:5432" ];
     };

@@ -188,7 +188,7 @@
 
     environment.systemPackages = with pkgs; [
       # general
-      git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file yq-go tokei atuin
+      git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file yq-go tokei
       # runtimes
       nodejs_22 typescript eslint bun go
       (python3.withPackages (ps: with ps; [ numpy scipy pillow rectpack ]))
@@ -200,6 +200,7 @@
       supercronic
       # not in nixpkgs: ../../packages
       herdr
+      (callPackage ../../packages/atuin.nix { })
       (callPackage ../../packages/hb.nix { })
       (callPackage ../../packages/rwx.nix { })
       (callPackage ../../packages/composio.nix { })
