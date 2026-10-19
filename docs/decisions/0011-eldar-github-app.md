@@ -1,6 +1,8 @@
 # 0011. Eldar works on GitHub as its own App; only Ben merges
 
-Accepted, 2026-10-17
+Accepted, 2026-10-17. How git and gh get tokens in the VM is superseded by 0015:
+they ask for the repo owner's token and fall back to the App, so nothing sets
+`GH_TOKEN` by hand. The App is still the only identity for the staging repo.
 
 ## Context
 
