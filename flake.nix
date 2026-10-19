@@ -17,7 +17,7 @@
     };
     # Ben's dotfiles (chezmoi source), shared with his other machines.
     dotfiles = {
-      url = "github:benjaminwood/dotfiles/eldar-os";
+      url = "github:benjaminwood/dotfiles/main";
       flake = false;
     };
   };
