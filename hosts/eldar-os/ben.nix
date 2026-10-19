@@ -17,6 +17,7 @@
     htop
     tree
     xxd # used by code-remote in .zshrc
+    (callPackage ../../packages/herdr.nix { }) # same build as Eldar's VM
   ];
 
   # Claude Code on the host, for Ben working on the system itself; installed
