@@ -64,6 +64,22 @@ may push to staging `main` directly; commits are signed with
    in place (decision 0010). Services that hold work (herdr, rootless Docker)
    must keep `restartIfChanged = false`.
 
+## The admin session
+
+Claude can also run as the admin on the host, outside Eldar's VM, to work
+on the system as a whole. It changes the system the same way as above
+(`scripts/try`, then signed commits and `scripts/apply`). When it needs one
+of the admin's credentials, it goes through the supervisor like an agent
+does: it POSTs to the agent API (`http://10.42.0.1:9100/exec`) with its own
+session ID and key and names only the credentials the command needs. The
+command runs in the VM, and Ben approves each one. It never reads secrets off
+disk, even though the admin's sudo could.
+
+The dotfiles are applied with `chezmoi apply --force` whenever the pin
+changes (`modules/chezmoi.nix`), so a hand edit to a managed file is lost
+later. Change the template, or keep machine-local state in an unmanaged file
+that the template sources.
+
 ## Working here
 
 - Push to `origin` (staging) only. Never push to `public`; publishing is
