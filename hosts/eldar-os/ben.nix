@@ -18,4 +18,23 @@
     tree
     xxd # used by code-remote in .zshrc
   ];
+
+  # Claude Code on the host, for Ben working on the system itself; installed
+  # and self-updating as in Eldar's VM (eldar-vm.nix).
+  environment.localBinInPath = true;
+  programs.nix-ld.enable = true;
+  systemd.services.claude-install-ben = {
+    description = "Install Claude Code for ben";
+    wantedBy = [ "multi-user.target" ];
+    wants = [ "network-online.target" ];
+    after = [ "network-online.target" ];
+    unitConfig.ConditionPathExists = "!/home/ben/.local/bin/claude";
+    path = with pkgs; [ bash curl coreutils gnutar gzip ];
+    environment.HOME = "/home/ben";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "ben";
+      ExecStart = "${pkgs.bash}/bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'";
+    };
+  };
 }
