@@ -23,11 +23,11 @@
     "dotfiles": {
       "flake": false,
       "locked": {
-        "lastModified": 1792441671,
-        "narHash": "sha256-mO0AeNT6mMLwUTZa4UOqp5m6U2zzcLgqqrGA/ZY4hyc=",
+        "lastModified": 1792450191,
+        "narHash": "sha256-ColsFyQztr+haPEhvJYMo9GOg+KVMb2QjJDAhSzX4BE=",
         "owner": "benjaminwood",
         "repo": "dotfiles",
-        "rev": "abb297faff58bc820635a9d9b4253f3ca3768b1f",
+        "rev": "e60da246d469aa47a20400af4a92db6785c36f41",
         "type": "github"
       },
       "original": {
