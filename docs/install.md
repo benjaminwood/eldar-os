@@ -200,7 +200,8 @@ change only these entries):
 
 - owners for `tag:eldar-os`, `tag:eldar-proxy` and `tag:eldar-os-hook`;
 - `hosts` aliases for Ben's Mac and iPad, and two rules: the Mac and the
-  iPad → `tag:eldar-os:22` (Ben SSHes in; the VM is a jump from there) and
+  iPad → `tag:eldar-os:22,8123` (Ben SSHes in, and the VM is a jump from
+  there; 8123 is Home Assistant, `hosts/eldar-os/home-assistant.nix`) and
   `tag:eldar-os` → the Mac's port 22 (the supervisor's Mac commands), both TCP
   only;
 - the `funnel` node attribute for `tag:eldar-os-hook` (public HTTPS; no ACL
