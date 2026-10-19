@@ -7,7 +7,7 @@
 # /var/lib/homeassistant, never in this repo; docs/install.md has the command
 # that moved it here from the previous OS.
 #
-# The image is pinned. Upgrading is a commit that changes the tag: read the
+# The image is pinned by digest. Upgrading is a commit that changes it: read the
 # release notes' breaking changes first, and keep a copy of /var/lib/homeassistant.
 { config, ... }:
 let
@@ -15,10 +15,11 @@ let
 in
 {
   virtualisation.oci-containers.containers.homeassistant = {
-    image = "homeassistant/home-assistant:2024.1.4";
+    image = "homeassistant/home-assistant@sha256:33afb0659d786213264c2211f8d91c5fe87461c56eba6a3a546eb05fc71e89f4"; # 2026.10.2
     volumes = [ "/var/lib/homeassistant:/config" ];
     environment.TZ = config.time.timeZone;
-    extraOptions = [ "--network=host" ];
+    # --stop-timeout: time to close the database on stop (upstream recommends 60 s).
+    extraOptions = [ "--network=host" "--stop-timeout=60" ];
   };
 
   # Created empty if missing, so a fresh machine starts a fresh setup instead
