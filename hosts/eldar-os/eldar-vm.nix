@@ -66,6 +66,28 @@
       };
     };
 
+    # herdr plugins, linked from the store instead of `herdr plugin install`
+    # (which downloads into a mutable checkout). Their keybindings are
+    # preferences, in the dotfiles' herdr config. Re-linking a new version
+    # takes effect without restarting the server.
+    systemd.user.services.herdr-plugins = {
+      description = "Link herdr plugins";
+      wantedBy = [ "default.target" ];
+      after = [ "herdr.service" ];
+      wants = [ "herdr.service" ];
+      unitConfig.ConditionUser = "eldar";
+      path = [ herdr pkgs.coreutils ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = pkgs.writeShellScript "herdr-plugins" ''
+          set -e
+          for _ in $(seq 100); do herdr plugin list >/dev/null 2>&1 && break; sleep 0.2; done
+          herdr plugin link ${pkgs.callPackage ../../packages/herdr-annotate.nix { }} >/dev/null
+        '';
+      };
+    };
+
     # Eldar, the chief-of-staff Claude session: kept running in herdr
     # workspace "primary", tab "Eldar", named "Eldar", with its channels: chat
     # (Ben talks to it from the supervisor's web UI) and relay (other agents
