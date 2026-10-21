@@ -1,4 +1,4 @@
-{ stdenv, lib, fetchFromGitHub, fetchurl, autoPatchelfHook }:
+{ stdenv, lib, fetchFromGitHub, fetchurl, autoPatchelfHook, plannotator-tui }:
 
 # herdr-annotate: a herdr plugin to annotate terminal text and review agent
 # replies (https://github.com/plannotator/herdr-annotate). `herdr plugin
@@ -6,11 +6,12 @@
 # install time; this builds the same plugin directory in the store, pinned,
 # for `herdr plugin link`. The plugin keeps its state in herdr's per-plugin
 # state dir, so a read-only root is fine.
-# To bump: update `rev`, then the two versions from the repo's *.version files,
-# and the hashes (nix store prefetch-file; cross-check each release's SHA256SUMS).
+# The review pane, plannotator-tui, is built from source (./plannotator-tui.nix)
+# until a release has configurable keys.
+# To bump: update `rev`, then the version from the repo's herdr-annotate.version,
+# and the hashes (nix store prefetch-file; cross-check the release's SHA256SUMS).
 let
   annotateVersion = "0.2.0"; # herdr-annotate.version
-  tuiVersion = "0.9.4"; # plannotator-tui.version
   target = "x86_64-unknown-linux-gnu";
 in
 stdenv.mkDerivation {
@@ -29,11 +30,6 @@ stdenv.mkDerivation {
     hash = "sha256-o+9OcnhLuoz3nlgtYCHKNPDWAPFw2jCVvMYKh7G8uUI=";
   };
 
-  tui = fetchurl {
-    url = "https://github.com/plannotator/plannotator-tui/releases/download/v${tuiVersion}/plannotator-tui-${target}";
-    hash = "sha256-1U3GA8lfcQZ3vBPr5rJLLm6xDOdhV3r4qVoFAChit00=";
-  };
-
   nativeBuildInputs = [ autoPatchelfHook ];
   buildInputs = [ stdenv.cc.cc.lib ];
   dontBuild = true;
@@ -45,9 +41,9 @@ stdenv.mkDerivation {
     mkdir -p $out
     cp -r herdr-plugin.toml scripts LICENSE $out/
     install -Dm755 $annotate $out/bin/herdr-annotate.exe
-    install -Dm755 $tui $out/bin/plannotator-tui.exe
+    ln -s ${lib.getExe plannotator-tui} $out/bin/plannotator-tui.exe
     echo ${annotateVersion} > $out/bin/herdr-annotate.version
-    printf %s ${tuiVersion} > $out/bin/plannotator-tui.version
+    printf %s ${plannotator-tui.version} > $out/bin/plannotator-tui.version
     runHook postInstall
   '';
 
