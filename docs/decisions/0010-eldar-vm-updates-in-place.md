@@ -20,7 +20,9 @@ Applying the host never restarts Eldar's VM for a software change.
   VM: those can't change live, and they're rare and deliberate. Otherwise it
   activates the new system inside the running VM, over SSH as root with a key
   only the host has (`switch-to-configuration test`). The VM reads the host's
-  store, so the new system is already there.
+  store, so the new system is already there. It first drops the VM's dentry
+  cache: the VM's store is an overlay on the host's, and a path looked up in
+  the VM before the host built it stays cached as missing.
 - A new kernel or hypervisor version isn't a hardware change: it's used from
   the VM's next restart.
 - Services whose definitions changed restart, as on any NixOS switch, except

@@ -239,6 +239,10 @@ in
           echo "Eldar's VM already runs ${toplevel}"
           exit 0
         fi
+        # The VM's /nix/store overlays the host's store, and overlayfs keeps a
+        # cached "not found" for a path looked up before the host built it, so
+        # the new system's paths can be missing. Drop those entries first.
+        ssh_vm 'echo 2 > /proc/sys/vm/drop_caches'
         echo "switching Eldar's VM in place to ${toplevel}"
         ssh_vm ${toplevel}/bin/switch-to-configuration test
       '';
