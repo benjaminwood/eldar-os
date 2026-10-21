@@ -63,6 +63,12 @@ func state() api.State {
 				Reason: "browser_navigate https://www.macrumors.com", SessionID: sDocs, SessionVerified: true,
 				TimeoutSeconds: 1800, ArcProfile: "mac:Profile 6", ArcProfileName: "Personal", Channel: "none",
 				CreatedAt: ms(-1 * time.Second), ExpiresAt: ms(179 * time.Second)},
+			{ID: 45, Kind: "copy", Target: "mac", Host: "Ben's Mac", Title: "skipped-renewals.csv → Ben's Mac",
+				Reason: "The skipped renewals, for the finance spreadsheet", SessionID: sBilling, SessionVerified: true,
+				Channel: "none", Copy: &api.CopyInfo{From: "Eldar's VM: /home/eldar/workspace/projects/api/out/skipped-renewals.csv",
+					To: "Ben's Mac: /Users/ben/Downloads/skipped-renewals.csv", Bytes: 48213,
+					SHA256: "9f2c4e1b7a0d3c58e6b2f19a4d07c3e8b5a61f2d9c40e7b18a3f5c6d2e9b0a14", Type: "CSV text"},
+				CreatedAt: ms(-1 * time.Second), ExpiresAt: ms(179 * time.Second)},
 		},
 		Sessions: []api.Session{
 			{ID: sEldar, FirstSeen: ms(-6 * time.Hour), LastSeen: ms(-2 * time.Minute), Requests: 37, Cwd: "/home/eldar/workspace", HerdrPane: "w1:p2", LastAction: "relay: deploy finished", Pinned: true},
@@ -215,7 +221,7 @@ func (d *demo) handler() http.Handler {
 		send(w, d.addGrant(b, client))
 	})
 	mux.HandleFunc("GET /admin/credentials", func(w http.ResponseWriter, r *http.Request) {
-		names := map[string][]string{"work": {"CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "SENTRY_TOKEN"}, "personal": {"GITHUB_TOKEN", "OPENAI_API_KEY"}}
+		names := map[string][]string{"work": {"CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "HONEYBADGER_API_KEY", "NPM_TOKEN", "SELECTIVE_API_KEY"}, "personal": {"GITHUB_TOKEN", "OPENAI_API_KEY"}}
 		p := r.URL.Query().Get("profile")
 		send(w, map[string]any{"profile": p, "credentials": names[p]})
 	})

@@ -441,7 +441,7 @@ function renderTray() {
   tray.hidden = false;
   tray.innerHTML = `<div class="tray-card${here ? " here" : ""}">
     <div class="tray-head">
-      <span class="chip ${kindClass(p)}">${kindLabel(p.kind, p.target)}</span><b>#${p.id}</b>
+      <span class="chip ${kindClass(p)}">${kindLabel(p.kind, p.target, p)}</span><b>#${p.id}</b>
       ${shown.length > 1 ? `<span class="tray-nav"><button data-t="tray-prev"${V.tray.idx === 0 ? " disabled" : ""}>‹</button>${V.tray.idx + 1}/${shown.length}<button data-t="tray-next"${V.tray.idx === shown.length - 1 ? " disabled" : ""}>›</button></span>` : ""}
       <span class="countdown" data-exp="${p.expiresAt}"></span>
     </div>

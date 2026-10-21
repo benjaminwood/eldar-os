@@ -33,6 +33,7 @@ type Config struct {
 	DefaultCommandTimeout time.Duration
 	MaxCommandTimeout     time.Duration
 	MaxOutputBytes        int
+	MaxCopyBytes          int64 // largest file POST /copy moves; 0 = no limit
 
 	OpBin     string
 	OpTimeout time.Duration

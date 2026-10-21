@@ -130,7 +130,7 @@ func TestDemoSemantics(t *testing.T) {
 	}
 	for _, r := range []request{
 		{Session: sDocs, Command: "gh pr create --fill", Credentials: work},
-		{Session: sBilling, Command: "sentry-cli releases new", Credentials: []string{"SENTRY_TOKEN"}},
+		{Session: sBilling, Command: "hb deploy --environment production", Credentials: []string{"HONEYBADGER_API_KEY"}},
 		{Session: sBilling, Command: "aws logs tail /ecs/api", AwsProfile: "staging.ReadOnly"},
 	} {
 		if _, ran := d.file(r); ran {

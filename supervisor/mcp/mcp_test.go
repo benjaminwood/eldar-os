@@ -20,9 +20,10 @@ func fakeSupervisor(t *testing.T, exec func(body map[string]any) map[string]any)
 			out = map[string]any{"op": map[string]any{"defaultProfile": "work",
 				"profiles": []any{map[string]any{"name": "work"}, map[string]any{"name": "home"}}},
 				"hosts": []any{map[string]any{"name": "mac", "label": "Ben's Mac", "description": "macOS laptop"}}}
-		case "/exec":
+		case "/exec", "/copy":
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
+			body["_path"] = r.URL.Path
 			out = exec(body)
 		default:
 			w.WriteHeader(404)
@@ -145,4 +146,20 @@ func TestHostExecListsConfiguredHosts(t *testing.T) {
 		return
 	}
 	t.Fatal("no supervisor_host_exec tool")
+}
+
+func TestCopyPostsBothEndsAndReportsTheVerifiedFile(t *testing.T) {
+	var sent map[string]any
+	srv := fakeSupervisor(t, func(b map[string]any) map[string]any {
+		sent = b
+		return map[string]any{"from": b["from"], "to": "mac:/Users/ben/Downloads/r.csv", "bytes": 47123, "sha256": "ab12"}
+	})
+	got := call(t, srv, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"supervisor_copy","arguments":{"from":"eldar:/tmp/r.csv","to":"mac:~/Downloads/","reason":"for Ben"}}}`)
+	text, isErr := resultText(t, got[1])
+	if isErr || text != "Copied eldar:/tmp/r.csv → mac:/Users/ben/Downloads/r.csv: 47123 bytes, sha256 ab12, verified at the destination." {
+		t.Fatalf("result %q", text)
+	}
+	if sent["_path"] != "/copy" || sent["to"] != "mac:~/Downloads/" || sent["sessionId"] != "sess-1" || sent["sessionKey"] != "key-1" || sent["overwrite"] != nil {
+		t.Fatalf("sent %v", sent)
+	}
 }

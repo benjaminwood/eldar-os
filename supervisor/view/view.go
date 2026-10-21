@@ -324,6 +324,20 @@ func Duration(d time.Duration) string {
 }
 
 // CredsOf summarizes a pending request's credential scope.
+// Bytes is a size for people: 512 B, 46.0 KiB, 1.2 GiB.
+func Bytes(n int64) string {
+	if n < 1024 {
+		return fmt.Sprintf("%d B", n)
+	}
+	v, units := float64(n)/1024, "KMGTPE"
+	i := 0
+	for v >= 1024 && i < len(units)-1 {
+		v /= 1024
+		i++
+	}
+	return fmt.Sprintf("%.1f %ciB", v, units[i])
+}
+
 func CredsOf(p api.Pending) string {
 	if p.Credentials == nil {
 		if p.Kind != "exec" {
@@ -345,7 +359,19 @@ func KindLabel(kind string) string {
 	return KindLabelFor(kind, "", "")
 }
 
-// KindLabelFor names a request, marking ones that run on the Mac.
+// PendingLabel labels a pending request: KindLabelFor, with a file copy's
+// direction.
+func PendingLabel(p api.Pending) string {
+	if p.Kind == "copy" && p.Copy != nil {
+		dir := "TO "
+		if p.Copy.Pull {
+			dir = "FROM "
+		}
+		return "COPY " + dir + strings.ToUpper(p.Host)
+	}
+	return KindLabelFor(p.Kind, p.Target, p.Host)
+}
+
 // KindLabelFor labels a pending request; host is the remote host's label
 // (Pending.Host) for requests that run on one.
 func KindLabelFor(kind, target, host string) string {

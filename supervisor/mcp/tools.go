@@ -271,6 +271,35 @@ func (s *server) toolList() []tool {
 			run: s.hostExecTool,
 		},
 		{
+			Name: "supervisor_copy",
+			describe: func(s *server) string {
+				d := "Copy one file between this VM and another machine Ben has configured, through the supervisor. " +
+					"The supervisor streams it end to end: the file never passes through your context, and the audit " +
+					"keeps its size and sha256, never its contents. Use it instead of encoding a file into a command.\n\n" +
+					"Ben approves the exact file (size and sha256), so finish writing it before you ask. Sending a file " +
+					"from this VM to a host is covered by that host's grants; pulling one off a host into this VM always " +
+					"asks. In this VM the copy reads and writes as eldar, so use paths eldar can reach (your home, your " +
+					"scratchpad). An existing file is never replaced unless you set overwrite.\n\nTargets: eldar (this VM)"
+				hosts := s.hostList()
+				if len(hosts) == 0 {
+					return d + "; no other hosts are configured right now."
+				}
+				for _, h := range hosts {
+					d += fmt.Sprintf("\n- %s: %s", h.Name, h.Label)
+				}
+				return d
+			},
+			Schema: func([]string, string) map[string]any {
+				return object(map[string]any{
+					"from":      map[string]any{"type": "string", "description": "The file to copy, as <target>:<path>, e.g. \"eldar:~/report.csv\". Absolute, or ~/ for that machine's home."},
+					"to":        map[string]any{"type": "string", "description": "Where it goes, as <target>:<path>. A path ending in / is a directory and keeps the file's name, e.g. \"mac:~/Downloads/\"."},
+					"reason":    map[string]any{"type": "string", "description": "Shown in Ben's approval prompt: what the file is and why it's moving."},
+					"overwrite": map[string]any{"type": "boolean", "default": false, "description": "Replace a file already at the destination."},
+				}, "from", "to", "reason")
+			},
+			run: s.copyTool,
+		},
+		{
 			Name: "supervisor_policy_check",
 			Description: "Would a command be allowed? Doesn't run it, fetch credentials or ask anyone; free and " +
 				"instant. Returns allow, ask or deny. Static policy only: grants, bypass and lockdown apply at call time.",
@@ -627,6 +656,27 @@ func (s *server) hostExecTool(ctx context.Context, args map[string]any) map[stri
 		return failure(data)
 	}
 	return execOutput(data, timeoutS)
+}
+
+func (s *server) copyTool(ctx context.Context, args map[string]any) map[string]any {
+	from, to := str(args, "from"), str(args, "to")
+	if from == "" || to == "" {
+		return errorText("from and to are required, as <target>:<path>.")
+	}
+	payload := map[string]any{"from": from, "to": to, "reason": str(args, "reason"), "timeoutSeconds": maxTimeoutS}
+	if o, ok := args["overwrite"].(bool); ok && o {
+		payload["overwrite"] = true
+	}
+	s.session(payload)
+	data, err := s.c.post(ctx, "/copy", payload, httpTimeoutFor(maxTimeoutS))
+	if err != nil {
+		return unreachable(err)
+	}
+	if _, ok := data["error"]; ok {
+		return failure(data)
+	}
+	bytes, _ := data["bytes"].(float64)
+	return textResult(fmt.Sprintf("Copied %s → %s: %.0f bytes, sha256 %v, verified at the destination.", data["from"], data["to"], bytes, data["sha256"]))
 }
 
 // awsScope: a grant's aws field as sent: "*" or a list (default none).
