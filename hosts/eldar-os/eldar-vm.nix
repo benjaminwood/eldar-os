@@ -83,7 +83,9 @@
         ExecStart = pkgs.writeShellScript "herdr-plugins" ''
           set -e
           for _ in $(seq 100); do herdr plugin list >/dev/null 2>&1 && break; sleep 0.2; done
-          herdr plugin link ${pkgs.callPackage ../../packages/herdr-annotate.nix { }} >/dev/null
+          herdr plugin link ${pkgs.callPackage ../../packages/herdr-annotate.nix {
+            plannotator-tui = pkgs.callPackage ../../packages/plannotator-tui.nix { };
+          }} >/dev/null
         '';
       };
     };
