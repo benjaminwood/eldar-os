@@ -28,7 +28,7 @@ const (
 // Pending is an approval waiting on Ben.
 type Pending struct {
 	ID              int         `json:"id"`
-	Kind            string      `json:"kind"` // exec | browser | grant_request
+	Kind            string      `json:"kind"` // exec | browser | grant_request | copy
 	Title           string      `json:"title"`
 	Command         string      `json:"command,omitempty"`
 	Reason          string      `json:"reason,omitempty"`
@@ -47,8 +47,21 @@ type Pending struct {
 	ArcProfileName  string      `json:"arcProfileName,omitempty"`
 	ArcSpace        string      `json:"arcSpace,omitempty"`
 	Grant           *GrantInput `json:"grant,omitempty"` // grant requests: the proposed grant
+	Copy            *CopyInfo   `json:"copy,omitempty"`  // file copies: what moves where
 	CreatedAt       int64       `json:"createdAt"`
 	ExpiresAt       int64       `json:"expiresAt"`
+}
+
+// CopyInfo describes a file copy waiting for approval. Ben approves this exact
+// file: the destination keeps it only if it still hashes to SHA256.
+type CopyInfo struct {
+	From      string `json:"from"` // "<label>: <path>"
+	To        string `json:"to"`   // the resolved destination file
+	Bytes     int64  `json:"bytes"`
+	SHA256    string `json:"sha256"`
+	Type      string `json:"type,omitempty"` // file(1)'s description
+	Pull      bool   `json:"pull,omitempty"` // into Eldar's VM, off a host
+	Overwrite bool   `json:"overwrite,omitempty"`
 }
 
 // Session is a Claude Code session that has called the proxy.

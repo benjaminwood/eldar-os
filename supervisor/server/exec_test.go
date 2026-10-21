@@ -18,6 +18,7 @@ type fakeRunner struct {
 	specs  []ExecSpec
 	result ExecResult
 	files  map[string]string
+	home   string // $HOME for Command, the VM end of a copy
 }
 
 func (f *fakeRunner) Exec(_ context.Context, s ExecSpec) (ExecResult, error) {

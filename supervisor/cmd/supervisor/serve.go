@@ -56,6 +56,7 @@ func runServe(args []string) {
 		DefaultCommandTimeout: secs("COMMAND_TIMEOUT_S", 300),
 		MaxCommandTimeout:     secs("MAX_COMMAND_TIMEOUT_S", 900),
 		MaxOutputBytes:        num("MAX_OUTPUT_BYTES", 5<<20),
+		MaxCopyBytes:          int64(num("MAX_COPY_BYTES", 2<<30)),
 		OpBin:                 env("OP_PATH", "op"),
 		OpTimeout:             ms("OP_TIMEOUT_MS", 15_000),
 		AgentUser:             env("SUPERVISOR_AGENT_USER", "eldar"),

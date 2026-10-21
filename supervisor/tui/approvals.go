@@ -80,7 +80,7 @@ func (m *model) pendingRow(p api.Pending, w int) string {
 
 	secs := time.UnixMilli(p.ExpiresAt).Sub(m.now).Seconds()
 	left := lipgloss.NewStyle().Foreground(c(urgency(secs))).Render(view.Remaining(p.ExpiresAt, m.now))
-	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Render(view.KindLabelFor(p.Kind, p.Target, p.Host))
+	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Render(view.PendingLabel(p))
 	head := box + " " + sBold.Render("#"+id) + " " + kind
 	head += strings.Repeat(" ", max(1, w-3-lipgloss.Width(head)-lipgloss.Width(left))) + left
 
@@ -132,7 +132,7 @@ func (m *model) pendingDetail(w, h int) string {
 	total := float64(p.ExpiresAt-p.CreatedAt) / 1000
 	color := urgency(secsLeft)
 
-	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Bold(true).Render(view.KindLabelFor(p.Kind, p.Target, p.Host))
+	kind := lipgloss.NewStyle().Foreground(c(kindColor(p.Kind, p.Target))).Bold(true).Render(view.PendingLabel(*p))
 	head := sBold.Render(fmt.Sprintf("#%d", p.ID)) + "  " + kind
 	exp := lipgloss.NewStyle().Foreground(c(color)).Render("expires in " + view.Remaining(p.ExpiresAt, m.now))
 	head += strings.Repeat(" ", max(1, inner-lipgloss.Width(head)-lipgloss.Width(exp))) + exp
@@ -209,6 +209,18 @@ func (m *model) pendingDetail(w, h int) string {
 		}
 		field("For", sOrange.Render(view.Duration(time.Duration(p.TimeoutSeconds)*time.Second))+sFaint.Render("  this session only"))
 		field("Answer", sDim.Render("a approve as asked · g narrow it first · d deny"))
+	} else if cp := p.Copy; p.Kind == "copy" && cp != nil {
+		if cp.Pull {
+			field("Pulls", sOrange.Bold(true).Render("⚠ a file off "+p.Host+" into Eldar's VM"))
+		}
+		field("From", sBright.Render(cp.From))
+		to := sBright.Render(cp.To)
+		if cp.Overwrite {
+			to += "  " + sOrange.Render("replaces what's there")
+		}
+		field("To", to)
+		field("Size", sBase.Render(view.Bytes(cp.Bytes))+sFaint.Render("  "+cp.Type))
+		field("SHA-256", sDim.Render(cp.SHA256))
 	} else if p.Kind == "browser" {
 		arc := p.ArcProfileName
 		if p.ArcSpace != "" {

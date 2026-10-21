@@ -182,7 +182,8 @@ function dur(ms) {
   return `${Math.floor(h / 24)}d`;
 }
 const urgency = (sec) => (sec < 20 ? "var(--red)" : sec < 60 ? "var(--orange)" : "var(--mint)");
-const kindLabel = (k, target) => (k === "browser" ? `BROWSER ON ${hostLabel(target).toUpperCase()}` : isHost(target) ? `ON ${hostLabel(target).toUpperCase()}` : k === "grant_request" ? "GRANT REQUEST" : "COMMAND");
+const kindLabel = (k, target, p) => (k === "copy" ? `COPY ${p?.copy?.pull ? "FROM" : "TO"} ${hostLabel(target).toUpperCase()}` : k === "browser" ? `BROWSER ON ${hostLabel(target).toUpperCase()}` : isHost(target) ? `ON ${hostLabel(target).toUpperCase()}` : k === "grant_request" ? "GRANT REQUEST" : "COMMAND");
+const sizeOf = (n) => { if (n < 1024) return `${n} B`; let v = n / 1024, i = 0; while (v >= 1024 && i < 5) { v /= 1024; i++; } return `${v.toFixed(1)} ${"KMGTPE"[i]}iB`; };
 const kindClass = (p) => (p.kind === "browser" || p.kind === "grant_request" ? "k-bypass" : isHost(p.target) ? "k-mac" : `k-${p.kind}`);
 const hostGrants = (h) => (S.data?.grants || []).filter((g) => g.target === h);
 const hostBypassIds = (h) => hostGrants(h).filter((g) => g.session === "*" && g.profile === "*" && g.credentials === "*").map((g) => g.id);
@@ -367,8 +368,15 @@ function pendingCard(p) {
     ["For", esc(dur(p.timeoutSeconds * 1000))],
     p.reason && ["Reason", `<span class="reason">${esc(p.reason)}</span>`],
   ].filter(Boolean) : [
-    isHost(p.target) && ["Runs on", `<b class="mac">${esc(p.host || hostLabel(p.target))}</b>`],
+    isHost(p.target) && p.kind !== "copy" && ["Runs on", `<b class="mac">${esc(p.host || hostLabel(p.target))}</b>`],
     ["Session", sess],
+    ...(p.kind === "copy" && p.copy ? [
+      p.copy.pull && ["Pulls", `<span class="warn"><b>⚠ a file off ${esc(p.host || hostLabel(p.target))} into Eldar's VM</b></span>`],
+      ["From", `<span class="mono">${esc(p.copy.from)}</span>`],
+      ["To", `<span class="mono">${esc(p.copy.to)}</span>${p.copy.overwrite ? ` <span class="warn">replaces what's there</span>` : ""}`],
+      ["Size", `${esc(sizeOf(p.copy.bytes))}${p.copy.type ? ` <span class="dim">· ${esc(p.copy.type)}</span>` : ""}`],
+      ["SHA-256", `<span class="mono dim">${esc(p.copy.sha256)}</span>`],
+    ] : []),
     p.kind === "browser" && p.arcProfileName && ["Profile", `<b class="mac">${esc(p.arcProfileName)}</b>${p.arcSpace ? ` <span class="dim">· ${esc(p.arcSpace)} space</span>` : ""}`],
     p.profile && ["Profile", `<span class="tag">${esc(p.profile)}</span>`],
     creds && ["Creds", creds],
@@ -384,7 +392,7 @@ function pendingCard(p) {
   return `<article class="card pending${marked ? " marked" : ""}" id="p${p.id}" data-id="${p.id}">
     <div class="p-head">
       <button class="mark${marked ? " on" : ""}" data-action="mark" data-id="${p.id}" aria-label="Select">${marked ? check : ""}</button>
-      <span class="chip ${kindClass(p)}">${kindLabel(p.kind, p.target)}</span>
+      <span class="chip ${kindClass(p)}">${kindLabel(p.kind, p.target, p)}</span>
       <span class="p-id">#${p.id}</span>
       <span class="spacer"></span>
       ${p.channel === "tmux" ? `<span class="dim" style="font-size:12px">also in tmux</span>` : ""}

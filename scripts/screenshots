@@ -27,7 +27,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "building…"
-scripts/go build -o /src/.screenshots-bin/ ./cmd/demo-admin ./cmd/supervisor
+scripts/go build -o .screenshots-bin/ ./cmd/demo-admin ./cmd/supervisor
 mv supervisor/.screenshots-bin/* "$work/" && rmdir supervisor/.screenshots-bin
 
 if curl -s -o /dev/null http://127.0.0.1:$PORT/; then

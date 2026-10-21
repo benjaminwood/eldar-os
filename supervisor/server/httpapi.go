@@ -40,6 +40,15 @@ func (s *Supervisor) agentHandler() http.Handler {
 		res := s.HandleExec(r.Context(), req)
 		sendJSON(w, res.status, res.body)
 	})
+	mux.HandleFunc("POST /copy", func(w http.ResponseWriter, r *http.Request) {
+		var req CopyRequest
+		if err := readJSON(r, &req); err != nil {
+			sendJSON(w, 400, map[string]any{"error": "invalid JSON: " + err.Error(), "outcome": OutBadRequest})
+			return
+		}
+		res := s.HandleCopy(r.Context(), req)
+		sendJSON(w, res.status, res.body)
+	})
 	grant := func(legacy string, shape func(*GrantRequestBody)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			var b GrantRequestBody

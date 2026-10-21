@@ -106,6 +106,14 @@ func (r *SSHRunner) sshArgs(user string) []string {
 	}
 }
 
+// Command runs script under sh as user, with stdin and stdout left to the
+// caller (file copies stream through them).
+func (r *SSHRunner) Command(ctx context.Context, user, script string) *exec.Cmd {
+	args := r.sshArgs(user)
+	args[len(args)-1] = "sh -c " + shellQuote(script)
+	return exec.CommandContext(ctx, "ssh", args...)
+}
+
 func (r *SSHRunner) Exec(ctx context.Context, s ExecSpec) (ExecResult, error) {
 	script, err := r.Script(s)
 	if err != nil {

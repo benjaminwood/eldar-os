@@ -59,8 +59,9 @@ are marked where they appear.
   Agents can ask for a grant, and you can narrow it before approving. Why it
   works this way: [decision 0013](docs/decisions/0013-approvals-and-grants.md).
 - **Other machines, explicitly.** Agents can run commands on configured hosts
-  (a Mac, first), with per-host allow lists and grants, and drive a real
-  browser on them through a bridge, one approved 30-minute window at a time.
+  (a Mac, first), with per-host allow lists and grants, copy files to and from
+  them (streamed by the supervisor, approved by size and hash), and drive a
+  real browser on them through a bridge, one approved 30-minute window at a time.
   The web UI won't take approvals from a device whose browser an agent is
   driving.
 - **A browser of its own.** Eldar has a headful Chrome for Playwright, which
@@ -85,7 +86,7 @@ are marked where they appear.
 │ host (NixOS)                    ▼                                  │
 │   supervisor ── policy · grants · approvals · audit                │
 │     │  ├─ 1Password, AWS IAM Identity Center                       │
-│     │  ├─ other hosts over SSH (commands, browser bridge)          │
+│     │  ├─ other hosts over SSH (commands, files, browser bridge)   │
 │     │  └─ GitHub App tokens                                        │
 │     │                                                              │
 │   apply loop ── webhook ping → fetch main → verify signatures      │
