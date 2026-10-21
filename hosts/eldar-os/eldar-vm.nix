@@ -2,11 +2,12 @@
 # Machine-specific: a fork picks its own tools.
 { dotfiles, ... }:
 {
-  # While eldar-os itself runs as a VM (8 CPUs, 40 GB), Eldar gets most of it:
+  # Eldar gets most of the machine (Ryzen 9 3900X: 24 threads, 64 GB):
   # its projects' dev stacks (databases, search, Rails, Phoenix) run in here.
-  # At cutover to bare metal (Ryzen 9 3900X: 24 threads, 64 GB): vcpu = 24,
-  # memMiB = 57344 (all but ~8 GB for the host, supervisor and desktop).
-  eldar-os.eldarVm.vcpu = 6;
+  # All 24 threads (vCPUs are scheduled, not reserved), and all but 16 GB of
+  # RAM: the host keeps room for its own services (Home Assistant, Atuin,
+  # Docker), the supervisor and the virtiofs daemons.
+  eldar-os.eldarVm.vcpu = 24;
   # Eldar's identity and Claude settings live in its workspace repo (private).
   eldar-os.eldarVm.claudeLinks = {
     "CLAUDE.md" = "user/CLAUDE.md";
@@ -18,7 +19,7 @@
     command = "/run/current-system/sw/bin/npx";
     args = [ "-y" "@playwright/mcp@0.0.83" "--cdp-endpoint" "http://127.0.0.1:19222" "--viewport-size" "1280,800" ];
   };
-  eldar-os.eldarVm.memMiB = 32768;
+  eldar-os.eldarVm.memMiB = 49152;
 
   eldar-os.eldarVm.config = { pkgs, lib, ... }:
   let
