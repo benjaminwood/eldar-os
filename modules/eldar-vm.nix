@@ -271,20 +271,21 @@ in
       ];
       # Relative images live in /var/lib/microvms/eldar on the host. Sparse:
       # they only take space as they fill. Rootless Docker's data lives in
-      # eldar's home.
+      # eldar's home. The root is a disk too, not microvm.nix's default
+      # tmpfs: agents write gigabytes to /tmp, and in RAM that starved the
+      # VM of memory.
       volumes = [
         { image = "home.img"; mountPoint = "/home"; size = 256000; }
+        { image = "root.img"; label = "root"; mountPoint = "/"; size = 65536; } # found by label
       ];
-      # `nix shell` / `nix profile install` inside the VM land in a RAM-backed
-      # layer over the host's read-only store: scratch, gone on restart.
-      # Permanent tools go into this flake.
+      # `nix shell` / `nix profile install` inside the VM land in a writable
+      # layer over the host's read-only store, on the root disk. Permanent
+      # tools go into this flake; the rest is collected weekly (nix.gc below).
       writableStoreOverlay = "/nix/.rw-store";
     };
-    fileSystems."/nix/.rw-store" = {
-      fsType = "tmpfs";
-      options = [ "mode=0755" "size=16G" ];
-      neededForBoot = true;
-    };
+    # /tmp stays scratch: emptied at every boot.
+    boot.tmp.cleanOnBoot = true;
+    nix.gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
     networking.useNetworkd = true;
