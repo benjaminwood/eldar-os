@@ -82,7 +82,7 @@ jobs. Done last.
 - [x] Tailscale for the host (`tag:eldar-os`): Ben's Mac SSHes in; the host
       reaches only the Mac's SSH; Eldar's VM stays off the tailnet
 - [ ] Tailscale for Eldar's VM, if it needs its own identity
-- [x] `*.test` dev domains: low ports, resolver and Chrome's host rules in the VM (decision 0016)
+- [x] `*.test` dev domains: low ports, resolver and Chrome's host rules in the VM
 - [x] Chrome for Playwright: in Eldar's VM (rootless Docker), `playwright` MCP
       in every session
 - [x] Ben watches that Chrome from his tailnet (eldar-chrome),

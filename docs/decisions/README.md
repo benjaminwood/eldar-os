@@ -24,4 +24,3 @@ the old one *Superseded by NNNN*. Don't rewrite history.
 | [0013](0013-approvals-and-grants.md) | Each credentialed command is approved on its own, until Ben grants more | Accepted |
 | [0014](0014-host-docker.md) | Household services run in rootful Docker on the host | Accepted |
 | [0015](0015-ambient-credentials.md) | Ambient credentials come from the supervisor, by directory and owner | Accepted |
-| [0016](0016-dev-domains-in-the-vm.md) | Dev stacks in Eldar's VM bind low ports and own *.test | Accepted |

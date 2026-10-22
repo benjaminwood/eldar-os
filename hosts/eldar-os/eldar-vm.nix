@@ -38,7 +38,7 @@
     # Chrome agents drive freely (Playwright over CDP); Ben watches its stream.
     eldar-os.vmChrome = {
       enable = true;
-      # *.test: the dev router below, reached at the VM's own address (decision 0016).
+      # *.test: the dev router below, reached at the VM's own address.
       hostRules = "MAP *.test ${config.eldar-os.eldarVm.address}";
       # Chrome 155.0.8059.84 (ls132)
       image = "lscr.io/linuxserver/chrome@sha256:0bd253fcf2bc409f7614a5ecd1237ebc90d04002ceb9fc1b5431a911089deab9";
