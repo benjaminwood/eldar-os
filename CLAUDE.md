@@ -36,9 +36,13 @@ If something had to be done by hand, it's written down with the exact command.
 
 ## Decisions
 
-Choices that shape the system get a short record in `docs/decisions/`
-(see 0001): what, why, and the cost, in a few paragraphs a person reads in a
-minute. Check them before changing anything security-related, link to them
+Records in `docs/decisions/` (see 0001) are for architectural changes of
+consequence, and usually only when Ben asks for one. Don't add one by
+default: if a change seems to deserve a record, suggest it and let Ben
+decide. Most changes are explained well enough by their commit message and a
+comment in the code. A record is what, why, and the cost, in a few paragraphs
+a person reads in a minute, with no history of how things used to be. Check
+the existing ones before changing anything security-related, link to them
 from code that exists because of one, and supersede rather than rewrite.
 
 ## Changing the system
