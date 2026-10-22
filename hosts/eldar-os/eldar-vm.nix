@@ -1,6 +1,6 @@
 # Eldar's VM on this machine (modules/eldar-vm.nix): sizing, and what's inside.
 # Machine-specific: a fork picks its own tools.
-{ dotfiles, ... }:
+{ dotfiles, config, ... }:
 {
   # Eldar gets most of the machine (Ryzen 9 3900X: 24 threads, 64 GB):
   # its projects' dev stacks (databases, search, Rails, Phoenix) run in here.
@@ -38,9 +38,19 @@
     # Chrome agents drive freely (Playwright over CDP); Ben watches its stream.
     eldar-os.vmChrome = {
       enable = true;
+      # *.test: the dev router below, reached at the VM's own address (decision 0016).
+      hostRules = "MAP *.test ${config.eldar-os.eldarVm.address}";
       # Chrome 155.0.8059.84 (ls132)
       image = "lscr.io/linuxserver/chrome@sha256:0bd253fcf2bc409f7614a5ecd1237ebc90d04002ceb9fc1b5431a911089deab9";
     };
+
+    # Dev stacks (the admin app's bin/dev) run an HTTPS router and a DNS server for *.test in
+    # eldar's rootless Docker with host networking, which is this VM's own network namespace, where
+    # ports below 1024 are root's. Let unprivileged processes bind from 53 up (DNS 53, HTTP 80,
+    # HTTPS 443): only eldar runs here, and the host enforces network policy at the tap.
+    boot.kernel.sysctl."net.ipv4.ip_unprivileged_port_start" = 53;
+    # *.test goes to that DNS server (127.0.0.1); every other name resolves as before.
+    services.resolved.settings.Resolve = { DNS = [ "127.0.0.1" ]; Domains = [ "~test" ]; };
 
     # herdr, Eldar's terminal workspace manager: the server runs as eldar
     # (lingering, so with no one logged in), and there's always a "primary"
