@@ -71,6 +71,8 @@ jobs. Done last.
       extension are public: github.com/benjaminwood/arc-playwright-bridge
 - [ ] Reload the patched extension in Arc from the bridge's checkout (it's
       still loaded from the legacy folder), then drop the legacy paths
+- [ ] Stable tab ids for browsers on other hosts (proposed:
+      `docs/proposals/browser-tab-ids.md`)
 - [x] Approval nudges in herdr
 - [x] AWS credentials: the supervisor signs in to SSO itself (`supervisor aws-login`)
 - [ ] ~~MCP OAuth~~: not porting for now. Cron auto-approval stays unused (the
