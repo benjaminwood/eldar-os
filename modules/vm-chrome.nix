@@ -62,6 +62,18 @@ in
       description = "LinuxServer chrome image, pinned by digest.";
     };
     timeZone = lib.mkOption { type = lib.types.str; default = "America/Los_Angeles"; };
+    hostRules = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      example = "MAP *.test 10.42.0.2";
+      description = ''
+        Chrome's --host-resolver-rules: names Chrome resolves itself instead of
+        asking DNS. Chrome runs on rootless Docker's network, which reaches the
+        VM only at its own address (slirp4netns, host loopback disabled), so
+        e.g. local dev domains served by a router in the VM map to that address.
+        Applied when Chrome next starts.
+      '';
+    };
     localPolicies = lib.mkOption {
       type = lib.types.str;
       default = "/home/eldar/.config/eldar-chrome/policies";
@@ -97,7 +109,7 @@ in
             -v ${autostart}:/config/.config/openbox/autostart:ro \
             -v ${clearLocks}:/custom-cont-init.d/01-clear-chrome-locks:ro \
             -e PUID=1000 -e PGID=1000 -e TZ=${cfg.timeZone} \
-            -e PIXELFLUX_WAYLAND=false \
+            -e PIXELFLUX_WAYLAND=false ${lib.optionalString (cfg.hostRules != "") "-e CHROME_HOST_RULES=${lib.escapeShellArg cfg.hostRules}"} \
             -e SELKIES_USE_CSS_SCALING=true -e SELKIES_FRAMERATE=8-30 \
             -e CHROME_CLI="--user-data-dir=/config/chrome-profile --remote-debugging-port=9222 --remote-allow-origins=*" \
             ${cfg.image}
