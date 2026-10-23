@@ -450,7 +450,9 @@ func (s *Supervisor) handleBrowserRequest(w http.ResponseWriter, r *http.Request
 	where := fmt.Sprintf("%s (%s) on %s", h.Browser.Name, p.Name, h.Label)
 	minutes := b.Minutes
 	why := ""
-	if g := s.grants.Match(GrantRequest{Target: "browser", SessionID: b.SessionID, Verified: verified, Profile: key}); g != nil {
+	if s.ambientBrowser(h.Name, p.ID) {
+		why = "Ambient (ambient.yaml): any session may use this profile"
+	} else if g := s.grants.Match(GrantRequest{Target: "browser", SessionID: b.SessionID, Verified: verified, Profile: key}); g != nil {
 		why = fmt.Sprintf("Browser grant #%d", g.ID)
 		if g.ExpiresAt != nil {
 			minutes = min(minutes, max(1, int(time.Until(time.UnixMilli(*g.ExpiresAt)).Minutes())))
@@ -613,14 +615,36 @@ func (s *Supervisor) handleBrowserChannel(w http.ResponseWriter, r *http.Request
 // handleBrowserNewTab: POST /browser/new-tab — open a URL in a space of the
 // window's profile (the bridge hands it to the session's Playwright).
 func (s *Supervisor) handleBrowserNewTab(w http.ResponseWriter, r *http.Request) {
-	var b struct{ Secret, Space, URL string }
+	var b struct{ Secret, Host, Profile, Space, URL, SessionID string }
 	readJSON(r, &b)
+	if s.modes.Current() == api.ModeLockdown {
+		sendJSON(w, 403, map[string]any{"error": "Supervisor is in lockdown mode", "outcome": OutBlockedPolicy})
+		return
+	}
+	// A tab in the window's own profile, or (hosts listed under newTab in
+	// ambient.yaml) in any profile without a window: opening a page gives no
+	// control of it.
 	win := s.window(b.Secret)
-	if win == nil {
+	hostName, profileID := "", ""
+	switch {
+	case win != nil && (b.Profile == "" || b.Profile == win.profile):
+		hostName, profileID = win.host, win.profile
+	case b.Profile != "" && validBrowserProfile.MatchString(b.Profile):
+		h, err := s.browserHost(b.Host)
+		if err != nil {
+			sendJSON(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		if !s.ambientNewTab(h.Name) {
+			sendJSON(w, 403, map[string]any{"error": "Ben hasn't allowed tabs without a window on " + h.Label + "; request access to the profile first"})
+			return
+		}
+		win, hostName, profileID = nil, h.Name, b.Profile
+	default:
 		sendJSON(w, 403, map[string]any{"error": "no open browser window for this session; request access first"})
 		return
 	}
-	h, err := s.browserHost(win.host)
+	h, err := s.browserHost(hostName)
 	if err != nil {
 		sendJSON(w, 400, map[string]any{"error": err.Error()})
 		return
@@ -640,25 +664,37 @@ func (s *Supervisor) handleBrowserNewTab(w http.ResponseWriter, r *http.Request)
 		sendJSON(w, 502, map[string]any{"error": err.Error()})
 		return
 	}
-	pi := slices.IndexFunc(profiles, func(p BrowserProfile) bool { return p.ID == win.profile })
+	pi := slices.IndexFunc(profiles, func(p BrowserProfile) bool { return p.ID == profileID })
+	if pi < 0 {
+		sendJSON(w, 400, map[string]any{"error": fmt.Sprintf("no %s profile %q on %s", h.Browser.Name, profileID, h.Label)})
+		return
+	}
+	p := profiles[pi]
 	var space *BrowserSpace
-	if pi >= 0 && validBrowserSpace.MatchString(b.Space) {
-		space = profiles[pi].space(b.Space)
+	if validBrowserSpace.MatchString(b.Space) {
+		space = p.space(b.Space)
 	}
 	if space == nil {
-		sendJSON(w, 400, map[string]any{"error": "that space isn't in the approved profile (" + win.profileName + ")"})
+		sendJSON(w, 400, map[string]any{"error": "that space isn't in profile " + p.Name})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	enc := base64.RawURLEncoding.EncodeToString([]byte(u.String()))
-	cmd := h.remote(ctx, fmt.Sprintf("%s new-tab %s %s %s", h.Browser.Bridge, shellQuote(win.profile), space.ID, enc))
+	cmd := h.remote(ctx, fmt.Sprintf("%s new-tab %s %s %s", h.Browser.Bridge, shellQuote(p.ID), space.ID, enc))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		sendJSON(w, 502, map[string]any{"error": "opening the tab failed: " + lastLine(string(out))})
 		return
 	}
-	s.browserLog(win, fmt.Sprintf("BROWSER TAB #%d", win.id), fmt.Sprintf("Opened %s in %s (%s space)", truncRunes(u.String(), 200), win.profileName, space.Title))
-	sendJSON(w, 200, map[string]any{"space": space.Title})
+	opened := fmt.Sprintf("Opened %s in %s (%s space)", truncRunes(u.String(), 200), p.Name, space.Title)
+	if win != nil {
+		s.browserLog(win, fmt.Sprintf("BROWSER TAB #%d", win.id), opened)
+	} else {
+		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: fmt.Sprintf("BROWSER TAB: %s (%s) on %s", h.Browser.Name, p.Name, h.Label), Decision: "allow",
+			DecisionReason: opened + "; ambient (ambient.yaml): tabs in any profile", SessionID: b.SessionID, Target: "browser", Mode: string(s.modes.Current())})
+		s.n.Changed()
+	}
+	sendJSON(w, 200, map[string]any{"space": space.Title, "profile": p.Name})
 }
 
 func (s *Supervisor) browserRoutes(mux *http.ServeMux) {

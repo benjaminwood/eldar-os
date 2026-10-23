@@ -166,6 +166,13 @@ What agents get without asking, named in `ambient.yaml` next to the policy
   helper sends the owner (system `credential.useHttpPath`). An explicit
   `$GITHUB_TOKEN` (an approved exec) is used before either.
 
+- `browser:` lists browser profiles any session may open a window in without
+  asking, like a browser grant for every session (and it survives restarts).
+  Windows still last only the minutes asked for.
+- `newTab:` lists hosts where agents may open a tab in any profile without a
+  window (`browser_open_tab` with a `profile`): the page opens for Ben, and
+  the agent can't see or drive it. Each tab is audited.
+
 Both are audited, the same fetch at most hourly, and refused in lockdown.
 After adding a value to a profile's Environment, clear that profile's cache
 (TUI or web UI) so the supervisor reads it again.

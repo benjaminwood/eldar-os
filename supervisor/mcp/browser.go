@@ -165,11 +165,13 @@ func (b *browserSession) server(version string) *server {
 					"minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 480, "description": fmt.Sprintf("Window length (default %d).", b.minutes)},
 				}, "profile", "reason")
 			}, run: b.requestTool},
-		{Name: "browser_open_tab", Description: "[Ben's browsers] Open a URL in a new tab in a specific space of the approved profile. Use this instead of browser_tabs 'new' when Ben wants a tab in a particular space, since the browser decides where Playwright's own new tabs land. The tab joins your session; select it with browser_tabs.",
+		{Name: "browser_open_tab", Description: "[Ben's browsers] Open a URL in a new tab in a specific space. Without 'profile', it uses your window's profile, and the tab joins your session (select it with browser_tabs); use this instead of browser_tabs 'new' when Ben wants a tab in a particular space. With 'profile', it opens the tab in that profile for Ben, without a window and usually without asking him (where he allows it); you can't see or drive that tab.",
 			Schema: func([]string, string) map[string]any {
 				return object(map[string]any{
-					"url":   map[string]any{"type": "string", "description": "http(s) URL to open."},
-					"space": map[string]any{"type": "string", "description": "Space name in the approved profile (default: the window's space)."},
+					"url":     map[string]any{"type": "string", "description": "http(s) URL to open."},
+					"space":   map[string]any{"type": "string", "description": "Space name in the profile (default: the window's space, or the profile's own)."},
+					"profile": map[string]any{"type": "string", "description": "Profile id or name from browser_profiles, or a space name, to open the tab there without a window (default: your window's profile)."},
+					"host":    map[string]any{"type": "string", "description": "With 'profile': which machine (default: the only one with a browser)."},
 				}, "url")
 			}, run: b.openTabTool},
 		{Name: "browser_release", Description: "[Ben's browsers] Give the current browser window back early when you're done. The next browser action asks Ben again.",
@@ -492,19 +494,50 @@ func (b *browserSession) relay(ctx context.Context, name string, params json.Raw
 }
 
 func (b *browserSession) openTabTool(ctx context.Context, args map[string]any) map[string]any {
-	if !b.live() {
-		return errorText("No open browser window. Call browser_request_access first.")
-	}
+	live := b.live()
 	b.mu.Lock()
 	host, p, space := b.host, b.profile, b.space
 	b.mu.Unlock()
-	ps, err := b.profiles(ctx, host)
-	if err != nil {
-		return errorText(err.Error())
-	}
-	cur := matchProfile(ps, p.ID)
-	if cur == nil {
-		return errorText("The approved profile is no longer listed.")
+	want := strings.TrimSpace(str(args, "profile"))
+	payload := map[string]any{"url": str(args, "url"), "sessionId": b.c.sessionID}
+	var cur *browserProfile
+	if want == "" || (live && matchProfile([]browserProfile{*p}, want) != nil) {
+		// The window's profile.
+		if !live {
+			return errorText("No open browser window. Name a profile (and space) to open a tab without one, or call browser_request_access first.")
+		}
+		ps, err := b.profiles(ctx, host)
+		if err != nil {
+			return errorText(err.Error())
+		}
+		if cur = matchProfile(ps, p.ID); cur == nil {
+			return errorText("The approved profile is no longer listed.")
+		}
+		payload["secret"] = b.secret
+	} else {
+		// Any profile, without a window, where Ben allows it (the supervisor decides).
+		h, err := b.pickHost(ctx, str(args, "host"))
+		if err != nil {
+			return errorText(err.Error())
+		}
+		ps, err := b.profiles(ctx, h.Host)
+		if err != nil {
+			return errorText(err.Error())
+		}
+		if cur = matchProfile(ps, want); cur == nil {
+			var names []string
+			for _, q := range ps {
+				names = append(names, q.Name)
+			}
+			return errorText(fmt.Sprintf("No profile matches %q on %s. Profiles: %s", want, h.Label, strings.Join(names, ", ")))
+		}
+		payload["host"], payload["profile"] = h.Host, cur.ID
+		space = nil
+		for i := range cur.SpaceIDs { // a space named as the profile is the one meant
+			if strings.EqualFold(cur.SpaceIDs[i].Title, want) {
+				space = &cur.SpaceIDs[i]
+			}
+		}
 	}
 	var target *struct{ ID, Title string }
 	if want := strings.ToLower(strings.TrimSpace(str(args, "space"))); want != "" {
@@ -525,12 +558,16 @@ func (b *browserSession) openTabTool(ctx context.Context, args map[string]any) m
 	if target == nil {
 		return errorText(fmt.Sprintf("%q isn't a space in this profile. Its spaces: %s", str(args, "space"), strings.Join(cur.Spaces, ", ")))
 	}
-	data, err := b.c.post(ctx, "/browser/new-tab", map[string]any{"secret": b.secret, "space": target.ID, "url": str(args, "url")}, 30*time.Second)
+	payload["space"] = target.ID
+	data, err := b.c.post(ctx, "/browser/new-tab", payload, 30*time.Second)
 	if err != nil {
 		return errorText(err.Error())
 	}
 	if e, ok := data["error"]; ok {
 		return errorText(fmt.Sprint(e))
+	}
+	if payload["secret"] == nil {
+		return textResult(fmt.Sprintf("Opened %s in Ben's %v profile (%v space). You can't see or drive this tab; for that, request access to the profile.", str(args, "url"), data["profile"], data["space"]))
 	}
 	return textResult(fmt.Sprintf("Opened %s in the %v space. It joins your session in a moment; use browser_tabs to list and select it.", str(args, "url"), data["space"]))
 }

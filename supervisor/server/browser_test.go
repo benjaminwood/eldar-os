@@ -178,3 +178,65 @@ func TestBrowserAdminGrant(t *testing.T) {
 		t.Fatal("a browser grant must name profiles (or *)")
 	}
 }
+
+func TestBrowserAmbientProfile(t *testing.T) {
+	s, srv, dir := browserTest(t)
+	path := filepath.Join(dir, "ambient.yaml")
+	s.ambient = NewAmbient(path, "/home/eldar")
+	request := func(session string) int {
+		t.Helper()
+		code, _ := postJSON(t, srv.URL+"/browser/request", map[string]any{"host": "mac", "secret": strings.Repeat(session[:1], 40), "profile": "Default", "sessionId": session, "reason": "test"})
+		return code
+	}
+	if code := request("aaa"); code != 403 { // no file: asks, and nobody answers in tests
+		t.Fatalf("unlisted profile: %d", code)
+	}
+	os.WriteFile(path, []byte("browser:\n  - { host: other, profile: Default }\n"), 0o600)
+	if code := request("aaa"); code != 403 {
+		t.Fatalf("another host's entry covered this one: %d", code)
+	}
+	// Listed: any session, verified or not, opens it without asking.
+	os.WriteFile(path, []byte("browser:\n  - { host: mac, profile: Default }\n"), 0o600)
+	for _, sess := range []string{"bbb", "ccc"} {
+		if code := request(sess); code != 200 {
+			t.Fatalf("ambient profile for %s: %d", sess, code)
+		}
+	}
+	s.modes.Lockdown()
+	if code := request("ddd"); code != 403 {
+		t.Fatalf("lockdown: %d", code)
+	}
+}
+
+func TestBrowserNewTabWithoutWindow(t *testing.T) {
+	s, srv, dir := browserTest(t)
+	path := filepath.Join(dir, "ambient.yaml")
+	s.ambient = NewAmbient(path, "/home/eldar")
+	tab := func(profile, space, url string) (int, map[string]any) {
+		t.Helper()
+		return postJSON(t, srv.URL+"/browser/new-tab", map[string]any{"host": "mac", "profile": profile, "space": space, "url": url, "sessionId": "sess"})
+	}
+	if code, _ := tab("Default", testSpace, "https://example.com/"); code != 403 {
+		t.Fatalf("tab without a window before Ben allowed it: %d", code)
+	}
+	os.WriteFile(path, []byte("newTab: [mac]\n"), 0o600)
+	if code, out := tab("Default", testSpace, "https://example.com/a"); code != 200 || out["space"] != "Work" {
+		t.Fatalf("allowed tab: %d %v", code, out)
+	}
+	if args, _ := os.ReadFile(filepath.Join(dir, "new-tab.args")); !strings.HasPrefix(string(args), "new-tab Default "+testSpace+" ") {
+		t.Fatalf("bridge new-tab args: %q", args)
+	}
+	if code, _ := tab("Default", testSpace, "https://approve.example/x"); code != 403 {
+		t.Fatalf("hidden origin opened: %d", code)
+	}
+	if code, _ := tab("Profile 2", testSpace, "https://example.com/"); code != 400 {
+		t.Fatalf("a space from another profile: %d", code)
+	}
+	if code, _ := tab("Nope", testSpace, "https://example.com/"); code != 400 {
+		t.Fatalf("unknown profile: %d", code)
+	}
+	s.modes.Lockdown()
+	if code, _ := tab("Default", testSpace, "https://example.com/"); code != 403 {
+		t.Fatalf("lockdown: %d", code)
+	}
+}

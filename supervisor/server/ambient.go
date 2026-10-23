@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -31,9 +32,14 @@ import (
 //	    vars: [RWX_ACCESS_TOKEN]
 //	git:
 //	  acme: { profile: acme, credential: GITHUB_PAT_ACME }
+//	browser:                             # browser profiles any session may open without asking
+//	  - { host: mac, profile: "Profile 8" }   # the profile's directory ID (GET /browser/profiles)
+//	newTab: [mac]                        # open a tab in any profile on these hosts, without a window
 //
 // `~` is the agent user's home. The file is re-read on every request, so edits
-// apply immediately.
+// apply immediately. A browser profile listed here works like a browser grant
+// for every session: the window still lasts only the minutes asked for, and
+// lockdown still refuses it.
 //
 // Directory scoping organises; it doesn't protect. The VM names the directory
 // it asks for, so anything in there can get any directory's set. Whether a
@@ -49,9 +55,16 @@ type ambientGitRule struct {
 	Credential string `yaml:"credential"`
 }
 
+type ambientBrowserRule struct {
+	Host    string `yaml:"host"`
+	Profile string `yaml:"profile"` // directory ID, which survives renaming the profile
+}
+
 type ambientFile struct {
-	Env []ambientEnvRule          `yaml:"env"`
-	Git map[string]ambientGitRule `yaml:"git"`
+	Env     []ambientEnvRule          `yaml:"env"`
+	Git     map[string]ambientGitRule `yaml:"git"`
+	Browser []ambientBrowserRule      `yaml:"browser"`
+	NewTab  []string                  `yaml:"newTab"` // hosts where agents may open a tab in any profile
 }
 
 type Ambient struct {
@@ -217,6 +230,19 @@ func (s *Supervisor) AmbientGit(ctx context.Context, owner string) response {
 	return response{200, map[string]any{"owner": owner, "token": got[rule.Credential]}}
 }
 
+// ambientBrowser reports whether any session may open host's browser profile
+// (by directory ID) without asking. A file that can't be read allows nothing.
+func (s *Supervisor) ambientBrowser(host, profileID string) bool {
+	f, err := s.ambient.load()
+	if err != nil {
+		logf("ambient: %v", err)
+		return false
+	}
+	return slices.ContainsFunc(f.Browser, func(r ambientBrowserRule) bool {
+		return r.Host == host && r.Profile == profileID
+	})
+}
+
 func (s *Supervisor) ambientRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /ambient/env", func(w http.ResponseWriter, r *http.Request) {
 		res := s.AmbientEnv(r.Context(), r.URL.Query().Get("dir"))
@@ -226,4 +252,16 @@ func (s *Supervisor) ambientRoutes(mux *http.ServeMux) {
 		res := s.AmbientGit(r.Context(), r.URL.Query().Get("owner"))
 		sendJSON(w, res.status, res.body)
 	})
+}
+
+// ambientNewTab reports whether agents may open a tab in any of host's
+// browser profiles without a window: a tab opens a page but gives no control
+// of it.
+func (s *Supervisor) ambientNewTab(host string) bool {
+	f, err := s.ambient.load()
+	if err != nil {
+		logf("ambient: %v", err)
+		return false
+	}
+	return slices.Contains(f.NewTab, host)
 }
