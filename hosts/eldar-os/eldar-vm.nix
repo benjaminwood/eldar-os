@@ -24,6 +24,7 @@
   eldar-os.eldarVm.config = { pkgs, lib, ... }:
   let
     herdr = pkgs.callPackage ../../packages/herdr.nix { };
+    plannotator-tui = pkgs.callPackage ../../packages/plannotator-tui.nix { };
     # Eldar's two channels (supervisor/mcp): Ben's chat, and notify_ben events
     # from other agents, scripts and cron. Only Eldar's session loads them.
     channels = pkgs.writeText "eldar-channels.mcp.json" (builtins.toJSON {
@@ -94,9 +95,7 @@
         ExecStart = pkgs.writeShellScript "herdr-plugins" ''
           set -e
           for _ in $(seq 100); do herdr plugin list >/dev/null 2>&1 && break; sleep 0.2; done
-          herdr plugin link ${pkgs.callPackage ../../packages/herdr-annotate.nix {
-            plannotator-tui = pkgs.callPackage ../../packages/plannotator-tui.nix { };
-          }} >/dev/null
+          herdr plugin link ${pkgs.callPackage ../../packages/herdr-annotate.nix { inherit plannotator-tui; }} >/dev/null
         '';
       };
     };
@@ -224,6 +223,8 @@
     environment.systemPackages = with pkgs; [
       # general
       git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file yq-go tokei
+      # on PATH for the plannotator-tui skill (`plannotator-tui herdr open`)
+      plannotator-tui
       # runtimes
       nodejs_22 typescript eslint bun go
       (python3.withPackages (ps: with ps; [ numpy scipy pillow rectpack ]))
