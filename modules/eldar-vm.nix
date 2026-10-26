@@ -280,12 +280,17 @@ in
       ];
       # `nix shell` / `nix profile install` inside the VM land in a writable
       # layer over the host's read-only store, on the root disk. Permanent
-      # tools go into this flake; the rest is collected weekly (nix.gc below).
+      # tools go into this flake.
       writableStoreOverlay = "/nix/.rw-store";
     };
     # /tmp stays scratch: emptied at every boot.
     boot.tmp.cleanOnBoot = true;
-    nix.gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };
+    # Never garbage-collect the store in here. Systems the host switches the VM
+    # to in place aren't registered in the VM's Nix database, so a GC sees
+    # parts of the running system as garbage; and deleting a path that lives in
+    # the host's store below the overlay leaves a whiteout that hides it. One
+    # GC hid /run/current-system/sw: no shell, no SSH, nothing new could start.
+    nix.gc.automatic = false;
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
     networking.useNetworkd = true;
