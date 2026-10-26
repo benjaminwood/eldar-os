@@ -377,7 +377,13 @@ in
     # Shared workspace: new files group-writable, so ben can edit them.
     environment.extraInit = "umask 002";
     # Docker runs as eldar (a container that mounts / gets eldar's files, not root).
-    virtualisation.docker.rootless = { enable = true; setSocketVariable = true; };
+    virtualisation.docker.rootless = {
+      enable = true;
+      setSocketVariable = true;
+      # host.docker.internal (--add-host ...:host-gateway) must reach services listening in this VM.
+      # Rootless Docker's default gateway is in its own network namespace, not the VM's.
+      daemon.settings.host-gateway-ip = vmAddr;
+    };
     # Containers live under it: an update never restarts it.
     systemd.user.services.docker.restartIfChanged = false;
     # No firewall inside: the host enforces Eldar's network policy at the tap,
