@@ -222,7 +222,8 @@ in
           echo "Eldar's VM isn't running; it starts with this config"
           exit 0
         fi
-        norm() { sed -E 's|/nix/store/[^ \x27"]*|<store>|g' "$1/bin/microvm-run"; }
+        # Image sizes (truncate -s) only apply when an image is created: not hardware.
+        norm() { sed -E -e '/truncate -s/d' -e 's|/nix/store/[^ \x27"]*|<store>|g' "$1/bin/microvm-run"; }
         if ! cmp -s <(norm ${dir}/booted) <(norm ${runner}); then
           echo "Eldar's VM hardware changed; restarting it:"
           diff <(norm ${dir}/booted) <(norm ${runner}) | head -20 || true
@@ -274,8 +275,12 @@ in
       # eldar's home. The root is a disk too, not microvm.nix's default
       # tmpfs: agents write gigabytes to /tmp, and in RAM that starved the
       # VM of memory.
+      # `size` only applies when an image is created. To grow one: raise it
+      # here, grow the file on the host (`truncate -s <size>M`, as microvm);
+      # the VM sees the new size from its next restart, and /home grows to
+      # fill it then (autoResize below).
       volumes = [
-        { image = "home.img"; mountPoint = "/home"; size = 256000; }
+        { image = "home.img"; mountPoint = "/home"; size = 358400; }
         { image = "root.img"; label = "root"; mountPoint = "/"; size = 65536; } # found by label
       ];
       # `nix shell` / `nix profile install` inside the VM land in a writable
@@ -285,6 +290,7 @@ in
     };
     # /tmp stays scratch: emptied at every boot.
     boot.tmp.cleanOnBoot = true;
+    fileSystems."/home".autoResize = true;
     # Never garbage-collect the store in here. Systems the host switches the VM
     # to in place aren't registered in the VM's Nix database, so a GC sees
     # parts of the running system as garbage; and deleting a path that lives in
