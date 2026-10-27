@@ -187,7 +187,7 @@ func (s *Supervisor) AmbientEnv(ctx context.Context, dir string) response {
 		credJSON, _ := json.Marshal(names)
 		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "ambient env", Decision: "allow",
 			DecisionReason: "Ambient for " + dir + " (ambient.yaml): " + strings.Join(names, ", "),
-			Mode: string(api.ModeNormal), Cwd: dir, Credentials: credJSON})
+			Mode:           string(api.ModeNormal), Cwd: dir, Credentials: credJSON})
 	}
 	return response{200, map[string]any{"dir": dir, "env": env, "missing": missing}}
 }

@@ -78,6 +78,23 @@ in
         Private, so not in this repo. Re-read on every request.
       '';
     };
+    imessage = {
+      configFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          The BlueBubbles bridge (supervisor/server/imessage.go): the server's
+          address, the herdr workspace and tab of the one Claude session that
+          may use it, and the contacts it may exchange iMessages with.
+          Private, so not in this repo. Re-read on every use. null = off.
+        '';
+      };
+      passwordFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "The BlueBubbles server's password, readable by the supervisor.";
+      };
+    };
     runAs = lib.mkOption {
       type = lib.types.str;
       default = "ben";
@@ -185,6 +202,9 @@ in
         SUPERVISOR_AMBIENT = cfg.ambientFile;
       } // lib.optionalAttrs (cfg.awsConfig != null) {
         SUPERVISOR_AWS_CONFIG = cfg.awsConfig;
+      } // lib.optionalAttrs (cfg.imessage.configFile != null) {
+        SUPERVISOR_IMESSAGE = cfg.imessage.configFile;
+        SUPERVISOR_IMESSAGE_PASSWORD_FILE = cfg.imessage.passwordFile;
       };
       serviceConfig = {
         ExecStart = "${lib.getExe cfg.package} serve";

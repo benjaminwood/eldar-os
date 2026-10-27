@@ -4,6 +4,7 @@
 //	supervisor mcp            every session: supervisor_exec, grants, notify_ben, …
 //	supervisor channel chat   Eldar's session only: Ben's chat (a Claude channel)
 //	supervisor channel relay  Eldar's session only: other agents' notify_ben events
+//	supervisor channel imessage  the session the BlueBubbles bridge names: iMessages
 //
 // They hold nothing themselves; every tool is a call to the supervisor's
 // agent API. The protocol is small enough to speak directly: newline-

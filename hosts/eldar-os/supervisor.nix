@@ -12,6 +12,12 @@
     # AWS profiles (one SSO session; `supervisor aws-login` signs in).
     awsConfig = "/var/lib/eldar-os/secrets/supervisor/aws-config";
     ambientFile = "/var/lib/eldar-os/secrets/supervisor/ambient.yaml";
+    # iMessage through the BlueBubbles server on a Mac on the LAN, for the
+    # family agent's session (its tab and contacts are in the private file).
+    imessage = {
+      configFile = "/var/lib/eldar-os/secrets/supervisor/imessage.yaml";
+      passwordFile = config.sops.secrets.bluebubbles-password.path;
+    };
     web = {
       enable = true;
       hostname = "supervisor";
@@ -40,6 +46,10 @@
     restartUnits = [ "supervisor.service" ];
   };
   sops.secrets."remote-hosts/quickbeam" = {
+    owner = "supervisor";
+    restartUnits = [ "supervisor.service" ];
+  };
+  sops.secrets.bluebubbles-password = {
     owner = "supervisor";
     restartUnits = [ "supervisor.service" ];
   };

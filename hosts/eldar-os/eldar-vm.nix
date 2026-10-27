@@ -33,6 +33,116 @@
         args = [ "channel" name ];
       });
     });
+    # Quickbeam, the family agent (below): its repo, Claude config, settings
+    # and only MCP server.
+    quickbeam = rec {
+      repo = "/var/lib/quickbeam/repo";
+      config = "/var/lib/quickbeam/claude";
+      mcp = pkgs.writeText "quickbeam.mcp.json" (builtins.toJSON {
+        mcpServers.imessage = { command = "/run/current-system/sw/bin/supervisor"; args = [ "channel" "imessage" ]; };
+      });
+      settings = pkgs.writeText "quickbeam-settings.json" (builtins.toJSON {
+        permissions.allow = [ "mcp__imessage__reply" "mcp__imessage__history" "mcp__imessage__contacts"
+          "Read" "Edit" "Write" "Glob" "Grep" "WebSearch" "WebFetch" ];
+        # herdr's hook (installed for Eldar): reports the session's ID to
+        # herdr, which is how the supervisor knows this is Quickbeam's tab.
+        hooks.SessionStart = [{ matcher = "^(startup|resume|clear|compact|fork)$";
+          hooks = [{ type = "command"; command = "bash /home/eldar/.claude/hooks/herdr-agent-state.sh session"; timeout = 10; }]; }];
+      });
+    };
+    # Claude sessions kept running in herdr, each in its own tab of workspace
+    # "primary", with its own flags. Every 30 s: make sure the workspace and
+    # tab exist and Claude runs in the tab; if it's been gone for two checks,
+    # resume the newest session with the tab's name (or start one). `herdr
+    # agent start` only acts on a pane at a bare shell prompt, so it never
+    # types into anything else. herdr resumes agents after a restart with a
+    # plain `claude --resume`, without these flags (or the tab's environment):
+    # such a Claude is stopped, and the next checks resume it properly.
+    keepClaude = unit: k: {
+      inherit (k) description;
+      wantedBy = [ "default.target" ];
+      after = [ "herdr.service" ];
+      wants = [ "herdr.service" ];
+      unitConfig.ConditionUser = "eldar";
+      path = [ herdr pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.findutils pkgs.bash pkgs.zsh pkgs.git ];
+      serviceConfig = {
+        ExecStartPre = pkgs.writeShellScript "${unit}-prepare" k.prepare;
+        ExecStart = pkgs.writeShellScript unit ''
+          WORKSPACE=primary TAB=${k.tab} NAME=${k.tab} CWD=${k.cwd}
+          TRANSCRIPTS=${k.configDir}/projects/${builtins.replaceStrings [ "/" ] [ "-" ] k.cwd}
+          CLAUDE_ARGS=(${lib.escapeShellArgs k.args})
+          MARKER=${lib.escapeShellArg k.marker}  # in the command line of the right Claude
+          TAB_ENV=(${lib.escapeShellArgs (lib.mapAttrsToList (n: v: "${n}=${v}") k.env)})
+          log() { echo "${unit}: $*"; }
+          h() { herdr "$@" 2>/dev/null; }
+          # Newest transcript whose latest name is $NAME; prints its session ID.
+          named_session() {
+            local f
+            for f in $(grep -l "\"customTitle\":\"$NAME\"" "$TRANSCRIPTS"/*.jsonl 2>/dev/null | xargs -r ls -t); do
+              if [[ $(grep -o '"customTitle":"[^"]*"' "$f" | tail -1) == "\"customTitle\":\"$NAME\"" ]]; then
+                basename "$f" .jsonl; return
+              fi
+            done
+          }
+          # Whether process $1 has every variable of the tab's environment.
+          has_env() {
+            local kv
+            for kv in "''${TAB_ENV[@]}"; do
+              tr '\0' '\n' < /proc/"$1"/environ 2>/dev/null | grep -qxF "$kv" || return 1
+            done
+          }
+          env_args=(); for kv in "''${TAB_ENV[@]}"; do env_args+=(--env "$kv"); done
+          misses=0
+          while true; do
+            sleep 30
+            ws=$(h workspace list | jq -r --arg l "$WORKSPACE" '[.result.workspaces[] | select(.label == $l)][0].workspace_id // empty')
+            if [[ -z $ws ]]; then
+              log "no '$WORKSPACE' workspace; creating it"
+              h workspace create --label "$WORKSPACE" --cwd /home/eldar/workspace --no-focus >/dev/null; continue
+            fi
+            tab=$(h tab list --workspace "$ws" | jq -r --arg l "$TAB" '[.result.tabs[] | select(.label == $l)][0].tab_id // empty')
+            if [[ -z $tab ]]; then
+              log "no '$TAB' tab in $WORKSPACE; creating it"
+              h tab create --workspace "$ws" --cwd "$CWD" --label "$TAB" "''${env_args[@]}" --no-focus >/dev/null; continue
+            fi
+            pane=$(h pane list --workspace "$ws" | jq -c --arg t "$tab" '[.result.panes[] | select(.tab_id == $t)][0] // empty')
+            [[ -z $pane ]] && continue
+            pane_id=$(jq -r '.pane_id' <<<"$pane")
+            if [[ $(jq -r '.agent // empty' <<<"$pane") == claude ]]; then
+              fg=$(h pane process-info --pane "$pane_id" | jq -c '.result.process_info.foreground_processes[0] // empty')
+              if [[ -n $fg && $(jq -r .cmdline <<<"$fg") != *"$MARKER"* ]]; then
+                log "Claude in $pane_id runs without the $TAB flags ($(jq -r .cmdline <<<"$fg")); restarting it"
+                kill "$(jq -r .pid <<<"$fg")"
+              elif [[ -n $fg ]] && ! has_env "$(jq -r .pid <<<"$fg")"; then
+                # The tab was made without its environment (by hand, say):
+                # stop Claude and close the tab, so it's made again with it.
+                log "Claude in $pane_id lacks the $TAB environment; closing the tab"
+                kill "$(jq -r .pid <<<"$fg")"; sleep 2; h tab close "$tab" >/dev/null
+              fi
+              misses=0; continue
+            fi
+            misses=$((misses + 1)); ((misses < 2)) && continue
+            id=$(named_session)
+            if [[ -n $id ]]; then
+              log "Claude isn't running in $pane_id; resuming $NAME ($id)"; args=("''${CLAUDE_ARGS[@]}" --resume "$id")
+            else
+              log "Claude isn't running in $pane_id and no session is named $NAME; starting one"; args=("''${CLAUDE_ARGS[@]}" -n "$NAME")
+            fi
+            out=$(herdr agent start "''${NAME,,}" --kind claude --pane "$pane_id" --timeout 90000 -- "''${args[@]}" 2>&1); rc=$?
+            if [[ $(h pane list --workspace "$ws" | jq -r --arg p "$pane_id" '.result.panes[] | select(.pane_id == $p) | .agent // empty') == claude ]]; then
+              # The development-channels warning waits for Enter (option 1
+              # confirms); Enter at an idle, empty prompt does nothing.
+              for _ in 1 2 3 4 5; do sleep 3; h pane send-keys "$pane_id" enter >/dev/null; done
+              misses=0
+            else
+              log "agent start failed (rc $rc): $(head -c 300 <<<"$out")"
+            fi
+          done
+        '';
+        Restart = "always";
+        RestartSec = 10;
+      };
+    };
   in {
     imports = [ ../../modules/chezmoi.nix ../../modules/vm-chrome.nix ];
 
@@ -100,102 +210,82 @@
       };
     };
 
-    # Eldar, the chief-of-staff Claude session: kept running in herdr
-    # workspace "primary", tab "Eldar", named "Eldar", with its channels: chat
-    # (Ben talks to it from the supervisor's web UI) and relay (other agents
-    # reach Ben through it). Every 30 s: make sure the workspace and tab
-    # exist and Claude runs in the tab; if it's been gone for two checks,
-    # resume the newest session named Eldar (or start one). `herdr agent
-    # start` only acts on a pane at a bare shell prompt, so it never types
-    # into anything else.
-    systemd.user.services.eldar-primary = {
+    # Eldar, the chief-of-staff session, with its channels: chat (Ben talks
+    # to it from the supervisor's web UI) and relay (other agents reach Ben
+    # through it).
+    systemd.user.services.eldar-primary = keepClaude "eldar-primary" {
       description = "Keep Eldar (the chief-of-staff session) running";
-      wantedBy = [ "default.target" ];
-      after = [ "herdr.service" ];
-      wants = [ "herdr.service" ];
-      unitConfig.ConditionUser = "eldar";
-      path = [ herdr pkgs.jq pkgs.coreutils pkgs.gnugrep pkgs.findutils pkgs.bash pkgs.zsh ];
-      serviceConfig = {
-        # Claude's one-time prompts would block an unattended start: the
-        # bypass-permissions confirmation (where Enter means "No, exit") and
-        # trusting ~/workspace. Accept them once, merging into existing files.
-        ExecStartPre = pkgs.writeShellScript "eldar-primary-prepare" ''
-          set -e
-          mkdir -p ~/.claude
-          f=~/.claude/settings.json; [ -s "$f" ] || echo '{}' > "$f"
-          jq '.skipDangerousModePermissionPrompt = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-          f=~/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
-          jq '.projects["/home/eldar/workspace"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-          # herdr's Claude hooks: report each session's ID and state to herdr
-          # (the supervisor uses it to know which session is Eldar).
-          herdr integration install claude >/dev/null
-        '';
-        ExecStart = pkgs.writeShellScript "eldar-primary" ''
-          WORKSPACE=primary TAB=Eldar NAME=Eldar CWD=/home/eldar/workspace
-          TRANSCRIPTS=$HOME/.claude/projects/-home-eldar-workspace
-          CLAUDE_ARGS=(--dangerously-skip-permissions
-            --dangerously-load-development-channels server:chat server:relay
-            --mcp-config ${channels})
-          log() { echo "eldar-primary: $*"; }
-          h() { herdr "$@" 2>/dev/null; }
-          # Newest transcript whose latest name is $NAME; prints its session ID.
-          eldar_session() {
-            local f
-            for f in $(grep -l "\"customTitle\":\"$NAME\"" "$TRANSCRIPTS"/*.jsonl 2>/dev/null | xargs -r ls -t); do
-              if [[ $(grep -o '"customTitle":"[^"]*"' "$f" | tail -1) == "\"customTitle\":\"$NAME\"" ]]; then
-                basename "$f" .jsonl; return
-              fi
-            done
-          }
-          misses=0
-          while true; do
-            sleep 30
-            ws=$(h workspace list | jq -r --arg l "$WORKSPACE" '[.result.workspaces[] | select(.label == $l)][0].workspace_id // empty')
-            if [[ -z $ws ]]; then
-              log "no '$WORKSPACE' workspace; creating it"
-              h workspace create --label "$WORKSPACE" --cwd "$CWD" --no-focus >/dev/null; continue
-            fi
-            tab=$(h tab list --workspace "$ws" | jq -r --arg l "$TAB" '[.result.tabs[] | select(.label == $l)][0].tab_id // empty')
-            if [[ -z $tab ]]; then
-              log "no '$TAB' tab in $WORKSPACE; creating it"
-              h tab create --workspace "$ws" --cwd "$CWD" --label "$TAB" --no-focus >/dev/null; continue
-            fi
-            pane=$(h pane list --workspace "$ws" | jq -c --arg t "$tab" '[.result.panes[] | select(.tab_id == $t)][0] // empty')
-            [[ -z $pane ]] && continue
-            pane_id=$(jq -r '.pane_id' <<<"$pane")
-            if [[ $(jq -r '.agent // empty' <<<"$pane") == claude ]]; then
-              # Running, but is it Eldar's Claude? herdr resumes agents after
-              # a restart with a plain `claude --resume`, without the
-              # channels. Stop that one; the next checks resume it properly.
-              fg=$(h pane process-info --pane "$pane_id" | jq -c '.result.process_info.foreground_processes[0] // empty')
-              if [[ -n $fg && $(jq -r .cmdline <<<"$fg") != *"server:chat server:relay"* ]]; then
-                log "Claude in $pane_id runs without Eldar's flags ($(jq -r .cmdline <<<"$fg")); restarting it"
-                kill "$(jq -r .pid <<<"$fg")"
-              fi
-              misses=0; continue
-            fi
-            misses=$((misses + 1)); ((misses < 2)) && continue
-            id=$(eldar_session)
-            if [[ -n $id ]]; then
-              log "Claude isn't running in $pane_id; resuming $NAME ($id)"; args=("''${CLAUDE_ARGS[@]}" --resume "$id")
-            else
-              log "Claude isn't running in $pane_id and no session is named $NAME; starting one"; args=("''${CLAUDE_ARGS[@]}" -n "$NAME")
-            fi
-            out=$(herdr agent start eldar --kind claude --pane "$pane_id" --timeout 90000 -- "''${args[@]}" 2>&1); rc=$?
-            if [[ $(h pane list --workspace "$ws" | jq -r --arg p "$pane_id" '.result.panes[] | select(.pane_id == $p) | .agent // empty') == claude ]]; then
-              # The development-channels warning waits for Enter (option 1
-              # confirms); Enter at an idle, empty prompt does nothing.
-              for _ in 1 2 3 4 5; do sleep 3; h pane send-keys "$pane_id" enter >/dev/null; done
-              misses=0
-            else
-              log "agent start failed (rc $rc): $(head -c 300 <<<"$out")"
-            fi
-          done
-        '';
-        Restart = "always";
-        RestartSec = 10;
-      };
+      tab = "Eldar";
+      cwd = "/home/eldar/workspace";
+      configDir = "$HOME/.claude";
+      args = [ "--dangerously-skip-permissions"
+        "--dangerously-load-development-channels" "server:chat" "server:relay"
+        "--mcp-config" "${channels}" ];
+      marker = "server:chat server:relay";
+      env = { };
+      # Claude's one-time prompts would block an unattended start: the
+      # bypass-permissions confirmation (where Enter means "No, exit") and
+      # trusting ~/workspace. Accept them once, merging into existing files.
+      prepare = ''
+        set -e
+        mkdir -p ~/.claude
+        f=~/.claude/settings.json; [ -s "$f" ] || echo '{}' > "$f"
+        jq '.skipDangerousModePermissionPrompt = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+        f=~/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
+        jq '.projects["/home/eldar/workspace"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+        # herdr's Claude hooks: report each session's ID and state to herdr
+        # (the supervisor uses it to know which session is Eldar).
+        herdr integration install claude >/dev/null
+      '';
     };
+    # Quickbeam, the family agent: iMessage through the supervisor's
+    # BlueBubbles bridge is all it reaches. Deliberately limited: restricted
+    # mode (no shell or code-running tools, file tools confined to its
+    # repo), only its own channel as MCP server, tools it isn't allowed are
+    # refused rather than asked about, and its own Claude config directory,
+    # so none of the user-level settings, MCP servers or CLAUDE.md load. It
+    # lives outside /home/eldar so no CLAUDE.md above it loads either.
+    systemd.user.services.quickbeam-primary = keepClaude "quickbeam-primary" {
+      description = "Keep Quickbeam (the family agent) running";
+      tab = "Quickbeam";
+      cwd = quickbeam.repo;
+      configDir = quickbeam.config;
+      args = [ "--restricted" "--permission-mode" "dontAsk"
+        "--tools" "Read,Edit,Write,Glob,Grep,WebSearch,WebFetch"
+        "--settings" "${quickbeam.settings}"
+        "--strict-mcp-config" "--mcp-config" "${quickbeam.mcp}"
+        "--dangerously-load-development-channels" "server:imessage" ];
+      marker = "--restricted";
+      env.CLAUDE_CONFIG_DIR = quickbeam.config;
+      prepare = ''
+        set -e
+        install -d -m 700 ${quickbeam.config}
+        f=${quickbeam.config}/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
+        jq '.projects["${quickbeam.repo}"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+        # Its repo (identity and memory), private: git reaches it through
+        # Eldar's GitHub App, which must be installed on it.
+        [ -d ${quickbeam.repo}/.git ] || git clone -q https://github.com/example/quickbeam ${quickbeam.repo} || true
+      '';
+    };
+    # Quickbeam writes its memory into its repo: commit and push it.
+    systemd.user.services.quickbeam-sync = {
+      description = "Commit and push Quickbeam's memory";
+      unitConfig.ConditionUser = "eldar";
+      path = [ pkgs.git pkgs.coreutils ];
+      serviceConfig.Type = "oneshot";
+      script = ''
+        cd ${quickbeam.repo} 2>/dev/null || exit 0
+        git add -A
+        git diff --cached --quiet || git -c user.name=Quickbeam -c user.email=quickbeam@localhost commit -q -m "Quickbeam's notes"
+        git pull -q --rebase && git push -q
+      '';
+    };
+    systemd.user.timers.quickbeam-sync = {
+      wantedBy = [ "timers.target" ];
+      unitConfig.ConditionUser = "eldar";
+      timerConfig = { OnBootSec = "5min"; OnUnitActiveSec = "15min"; };
+    };
+    systemd.tmpfiles.rules = [ "d /var/lib/quickbeam 0700 eldar eldar-ws -" ];
 
     # Ben works in here as eldar, so his dotfiles apply to both users.
     eldar-os.chezmoi.users = {

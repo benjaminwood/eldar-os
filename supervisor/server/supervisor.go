@@ -53,34 +53,40 @@ type Config struct {
 	AwsConfigPath             string // ~/.aws/config-style profiles; "" = no AWS
 	AwsStateDir               string
 	AmbientPath               string // what agents get without asking (ambient.go); "" = nothing
+	// iMessage through BlueBubbles (imessage.go): its config file ("" = off),
+	// the server password's file, and state.
+	IMessagePath, IMessagePasswordFile    string
+	IMessageEventsPath, IMessageStatePath string
 }
 
 // Supervisor holds all state and serves both APIs.
 type Supervisor struct {
-	cfg         Config
-	n           *Notifier
-	policy      *Policy
-	modes       *Modes
-	sessions    *Sessions
-	grants      *Grants
-	approvals   *Approvals
-	audit       *Audit
-	settings    *Settings
-	crons       *Crons
-	profiles    *Profiles
-	herdr       *Herdr
-	chat        *Chat
-	chatPins    KeyPins
-	relay       *Relay
-	relayPins   KeyPins
-	watches     *Watches
-	hostAllow   *HostAllow
-	browsers    *Browsers
-	aws         *AWS
-	browserPins KeyPins
-	ambient     *Ambient
-	termSSH     TerminalSSH
-	runner      interface {
+	cfg          Config
+	n            *Notifier
+	policy       *Policy
+	modes        *Modes
+	sessions     *Sessions
+	grants       *Grants
+	approvals    *Approvals
+	audit        *Audit
+	settings     *Settings
+	crons        *Crons
+	profiles     *Profiles
+	herdr        *Herdr
+	chat         *Chat
+	chatPins     KeyPins
+	relay        *Relay
+	relayPins    KeyPins
+	watches      *Watches
+	hostAllow    *HostAllow
+	browsers     *Browsers
+	aws          *AWS
+	browserPins  KeyPins
+	ambient      *Ambient
+	imessage     *IMessage
+	imessagePins KeyPins
+	termSSH      TerminalSSH
+	runner       interface {
 		Runner
 		ReadFile(ctx context.Context, path string) (string, error)
 	}
@@ -122,6 +128,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		browsers:       NewBrowsers(),
 		aws:            NewAWS(cfg.AwsConfigPath, cfg.AwsStateDir),
 		ambient:        NewAmbient(cfg.AmbientPath, "/home/"+cfg.AgentUser),
+		imessage:       NewIMessage(cfg.IMessagePath, cfg.IMessagePasswordFile, cfg.IMessageEventsPath, cfg.IMessageStatePath),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},
 	}, nil
@@ -136,6 +143,9 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 	logf("profiles: %v", s.profiles.Names())
 	go s.sweepBrowsers(ctx)
+	if s.cfg.IMessagePath != "" {
+		go s.runIMessage(ctx)
+	}
 
 	// The agent's port. Bound to the VM link only; IP_FREEBIND so the
 	// supervisor can start before the link is up.

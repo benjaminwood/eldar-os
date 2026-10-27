@@ -252,12 +252,17 @@ func (k *KeyPins) Check(sessionID, key string) bool {
 
 // chiefOfStaff is Eldar: the Claude pane in workspace ChatWorkspace, tab ChatTab.
 func (s *Supervisor) chiefOfStaff(ctx context.Context, maxAge time.Duration) *api.ChatEldar {
+	return s.claudeInTab(ctx, s.cfg.ChatWorkspace, s.cfg.ChatTab, maxAge)
+}
+
+// claudeInTab: the Claude session in herdr workspace ws, tab tab, if any.
+func (s *Supervisor) claudeInTab(ctx context.Context, ws, tab string, maxAge time.Duration) *api.ChatEldar {
 	for _, sp := range s.herdr.View(ctx, "", maxAge).Spaces {
-		if sp.Label != s.cfg.ChatWorkspace {
+		if sp.Label != ws {
 			continue
 		}
 		for _, t := range sp.Tabs {
-			if t.Label != s.cfg.ChatTab {
+			if t.Label != tab {
 				continue
 			}
 			for _, p := range t.Panes {
@@ -277,23 +282,29 @@ func (s *Supervisor) chatAuth(r *http.Request) (string, int, string) {
 
 // chiefOfStaffAuth: only the chief-of-staff session, presenting the key its
 // `what` channel pinned (each channel process has its own).
+func (s *Supervisor) chiefOfStaffAuth(r *http.Request, pins *KeyPins, what string, repin bool) (string, int, string) {
+	return s.tabSessionAuth(r, pins, what, s.cfg.ChatWorkspace, s.cfg.ChatTab, repin)
+}
+
+// tabSessionAuth: only the Claude session in herdr workspace ws, tab tab,
+// presenting the key its `what` channel pinned.
 // With repin (a stream connecting while none is open), the caller's key
 // replaces the pin: a new channel process in the same session, after the old
 // one ended. While a stream is open, only its key is accepted.
-func (s *Supervisor) chiefOfStaffAuth(r *http.Request, pins *KeyPins, what string, repin bool) (string, int, string) {
+func (s *Supervisor) tabSessionAuth(r *http.Request, pins *KeyPins, what, ws, tab string, repin bool) (string, int, string) {
 	sessionID, key := r.Header.Get("X-Session-Id"), r.Header.Get("X-Chat-Key")
 	if sessionID == "" || key == "" {
 		return "", 401, "need X-Session-Id and X-Chat-Key"
 	}
-	cos := s.chiefOfStaff(r.Context(), 3*time.Second)
-	if cos == nil || cos.SessionID != sessionID {
-		cos = s.chiefOfStaff(r.Context(), 0)
+	cur := s.claudeInTab(r.Context(), ws, tab, 3*time.Second)
+	if cur == nil || cur.SessionID != sessionID {
+		cur = s.claudeInTab(r.Context(), ws, tab, 0)
 	}
-	if cos == nil {
-		return "", 409, fmt.Sprintf("no Claude session in herdr workspace %q, tab %q", s.cfg.ChatWorkspace, s.cfg.ChatTab)
+	if cur == nil {
+		return "", 409, fmt.Sprintf("no Claude session in herdr workspace %q, tab %q", ws, tab)
 	}
-	if cos.SessionID != sessionID {
-		return "", 403, "only the chief-of-staff session (Eldar) can use the " + what
+	if cur.SessionID != sessionID {
+		return "", 403, fmt.Sprintf("only the Claude session in herdr workspace %q, tab %q can use the %s", ws, tab, what)
 	}
 	if repin {
 		pins.Repin(sessionID, key)

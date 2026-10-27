@@ -7,8 +7,9 @@
 //	supervisor browser MCP server: drive a browser profile on Ben's machines (stdio)
 //	supervisor aws-login [session]
 //	                   sign the supervisor in to AWS SSO (Ben approves in a browser)
-//	supervisor channel chat|relay
-//	                   Eldar's channels: Ben's chat, and other agents' notify_ben events
+//	supervisor channel chat|relay|imessage
+//	                   Eldar's channels (Ben's chat, other agents' notify_ben events),
+//	                   and iMessage through BlueBubbles for the session the bridge names
 //	supervisor notify [--origin WHO] MESSAGE
 //	                   one-way event to Eldar from a script or cron (or stdin)
 //	supervisor tell-agent PANE SESSION MESSAGE
@@ -52,7 +53,7 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "channel" {
 		if len(os.Args) != 3 {
-			fmt.Fprintln(os.Stderr, "usage: supervisor channel chat|relay")
+			fmt.Fprintln(os.Stderr, "usage: supervisor channel chat|relay|imessage")
 			os.Exit(2)
 		}
 		if err := mcp.RunChannel(os.Args[2], version); err != nil {

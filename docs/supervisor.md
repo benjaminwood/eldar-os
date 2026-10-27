@@ -177,6 +177,27 @@ Both are audited, the same fetch at most hourly, and refused in lockdown.
 After adding a value to a profile's Environment, clear that profile's cache
 (TUI or web UI) so the supervisor reads it again.
 
+## iMessage through BlueBubbles
+
+An agent with its own Apple ID can text through a
+[BlueBubbles](https://bluebubbles.app) server on a Mac on the LAN
+(`server/imessage.go`). A private file (`imessage.configFile`, re-read on
+every use) names the server, the herdr workspace and tab of the one Claude
+session that may use it, and the contacts it may exchange messages with; the
+server's password is a sops secret only the supervisor reads.
+
+- In: the supervisor polls BlueBubbles every few seconds and keeps messages
+  from allowed contacts (direct chats only) in `imessage.jsonl` until the
+  session's `imessage` channel (`supervisor channel imessage`) takes them, so
+  nothing is lost while it restarts. Anyone else's messages are dropped; the
+  audit records only who sent them.
+- Out: the channel's `reply`, `history` and `contacts` tools, to and with
+  allowed contacts only. Each message in or out is audited.
+
+On this machine it's Quickbeam's, the family agent (`quickbeam-primary` in
+`hosts/eldar-os/eldar-vm.nix`): restricted mode, its own Claude config, and
+this channel as its only MCP server.
+
 ## Telling a session its PR is live
 
 A session that opens a PR on the staging repo calls `supervisor_watch_pr`

@@ -29,6 +29,8 @@ import (
 //	SUPERVISOR_DEFAULT_PROFILE  the profile agents use unless told otherwise
 //	SUPERVISOR_AWS_CONFIG       ~/.aws/config-style AWS profiles (SSO) commands may name
 //	SUPERVISOR_AMBIENT          credentials agents get without asking (server/ambient.go)
+//	SUPERVISOR_IMESSAGE, SUPERVISOR_IMESSAGE_PASSWORD_FILE
+//	                            iMessage through BlueBubbles (server/imessage.go): config, password
 //	SUPERVISOR_HOSTS            hosts.json: remote hosts agents may run commands on
 //	SUPERVISOR_HOST_KEYS        directory of their private keys, one file per host name
 //	SUPERVISOR_GITHUB_APP_ID, SUPERVISOR_GITHUB_INSTALLATION_ID,
@@ -73,6 +75,10 @@ func runServe(args []string) {
 		AwsConfigPath:         os.Getenv("SUPERVISOR_AWS_CONFIG"),
 		AwsStateDir:           state + "/aws",
 		AmbientPath:           os.Getenv("SUPERVISOR_AMBIENT"),
+		IMessagePath:          os.Getenv("SUPERVISOR_IMESSAGE"),
+		IMessagePasswordFile:  os.Getenv("SUPERVISOR_IMESSAGE_PASSWORD_FILE"),
+		IMessageEventsPath:    state + "/imessage.jsonl",
+		IMessageStatePath:     state + "/imessage-state.json",
 	}
 	runner := &server.SSHRunner{
 		Host:        env("SUPERVISOR_AGENT_HOST", "10.42.0.2"),

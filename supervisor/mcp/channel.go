@@ -14,10 +14,11 @@ import (
 	"time"
 )
 
-// Channels: MCP servers that push events into Eldar's session as
-// <channel source="chat|relay" …>. Loaded only by Eldar, the chief-of-staff
-// session (its watchdog passes --mcp-config and
-// --dangerously-load-development-channels); the supervisor refuses their
+// Channels: MCP servers that push events into a session as
+// <channel source="chat|relay|imessage" …>. chat and relay are Eldar's, the
+// chief-of-staff session; imessage is the session in the tab the supervisor's
+// iMessage config names. Their watchdogs pass --mcp-config and
+// --dangerously-load-development-channels; the supervisor refuses each
 // stream to any other session. Each process makes its own random key, which
 // the supervisor pins to the session on first use.
 
@@ -53,8 +54,10 @@ func RunChannel(name, version string) error {
 		s = ch.chatServer(version)
 	case "relay":
 		s = ch.relayServer(version)
+	case "imessage":
+		s = ch.imessageServer(version)
 	default:
-		return fmt.Errorf("unknown channel %q (chat or relay)", name)
+		return fmt.Errorf("unknown channel %q (chat, relay or imessage)", name)
 	}
 	if c.sessionID == "" {
 		logStderr(name, "CLAUDE_CODE_SESSION_ID is unset; the supervisor will refuse this channel")
