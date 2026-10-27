@@ -39,6 +39,10 @@
     owner = "supervisor";
     restartUnits = [ "supervisor.service" ];
   };
+  sops.secrets."remote-hosts/quickbeam" = {
+    owner = "supervisor";
+    restartUnits = [ "supervisor.service" ];
+  };
   # Eldar's GitHub App (docs/decisions/0011-eldar-github-app.md); its IDs
   # are in supervisor-env.
   sops.secrets.github-app-key = {

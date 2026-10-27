@@ -80,7 +80,11 @@
     }];
   }];
 
-  environment.systemPackages = with pkgs; [ git vim curl rsync xfsprogs cryptsetup ];
+  environment.systemPackages = with pkgs; [
+    git vim curl rsync xfsprogs cryptsetup
+    # 1Password CLI for the admin (the Eldar-OS vault); the supervisor's build
+    (callPackage ../../packages/op-beta.nix { })
+  ];
 
   zramSwap.enable = true;
   services.fstrim.enable = true;
