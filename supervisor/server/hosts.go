@@ -145,7 +145,9 @@ func hostScript(command, cwd string, env map[string]string, timeout time.Duratio
 	// Without a terminal there's no job control, so the watchdog kills the
 	// command's tree by walking it with pgrep rather than by process group.
 	fmt.Fprintf(&b, `__tree() { for __c in $(pgrep -P $2 2>/dev/null); do __tree $1 $__c; done; kill -$1 $2 2>/dev/null; }
-__cmd=$(printf %%s %s | base64 -d)
+# --decode: older macOS base64 has no -d. If decoding fails, fail rather
+# than run an empty command and report success.
+__cmd=$(printf %%s %s | base64 --decode) || { echo "supervisor: could not decode the command" >&2; exit 125; }
 ( eval "$__cmd" ) </dev/null &
 __pid=$!
 ( sleep %d; __tree TERM $__pid; sleep 5; __tree KILL $__pid ) </dev/null >/dev/null 2>&1 &
