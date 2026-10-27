@@ -186,11 +186,15 @@ every use) names the server, the herdr workspace and tab of the one Claude
 session that may use it, and the contacts it may exchange messages with; the
 server's password is a sops secret only the supervisor reads.
 
-- In: the supervisor polls BlueBubbles every few seconds and keeps messages
-  from allowed contacts (direct chats only) in `imessage.jsonl` until the
-  session's `imessage` channel (`supervisor channel imessage`) takes them, so
-  nothing is lost while it restarts. Anyone else's messages are dropped; the
-  audit records only who sent them.
+- In: the supervisor polls BlueBubbles and keeps messages from allowed
+  contacts (direct chats only) in `imessage.jsonl` until the session's
+  `imessage` channel (`supervisor channel imessage`) takes them, so nothing
+  is lost while it restarts. Anyone else's messages are dropped; the audit
+  records only who sent them. With `imessage.webhook`, BlueBubbles'
+  new-message webhook (registered in its settings, pointing at
+  `http://<this machine>:<port>/bluebubbles/webhook`) makes it poll at once,
+  and the regular poll slows to every 30 s; without, it polls every 3 s. The
+  webhook's body is ignored, and the firewall admits only the Mac.
 - Out: the channel's `reply`, `history` and `contacts` tools, to and with
   allowed contacts only. Each message in or out is audited.
 

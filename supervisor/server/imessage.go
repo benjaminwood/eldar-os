@@ -44,13 +44,20 @@ import (
 //
 // Direct chats only: group chats are neither delivered nor sent to.
 //
+// With a webhook listener (Config.IMessageWebhook), BlueBubbles' new-message
+// webhook makes the supervisor poll at once, and the regular poll slows to a
+// backstop. The webhook's body is ignored: messages are only ever read from
+// BlueBubbles' API, so a forged webhook can cause an extra poll and nothing
+// else, and one lost while the supervisor restarts is caught by the next poll.
+//
 // Files (supervisor state): imessage.jsonl (delivered-or-pending messages,
 // append-only) and imessage-state.json ({lastRowID, deliveredUpTo}).
 
 const (
 	imessageMaxText = 5_000
 	imessageKeep    = 2000
-	imessagePoll    = 3 * time.Second
+	imessagePoll    = 3 * time.Second  // without a webhook
+	imessageBackup  = 30 * time.Second // with one: a backstop for lost webhooks
 )
 
 type imessageContact struct {
@@ -96,12 +103,13 @@ type IMessage struct {
 	stream  *chatStream
 	chats   map[string]string // address -> chat GUID, as last seen
 	lastErr string
+	nudge   chan struct{} // poll now (the webhook)
 }
 
 func NewIMessage(path, passwordFile, eventsPath, statePath string) *IMessage {
 	m := &IMessage{path: path, passwordFile: passwordFile, eventsPath: eventsPath, statePath: statePath,
 		http: &http.Client{Timeout: 30 * time.Second}, nextID: 1,
-		subs: map[chan IMessageEvent]struct{}{}, chats: map[string]string{}}
+		subs: map[chan IMessageEvent]struct{}{}, chats: map[string]string{}, nudge: make(chan struct{}, 1)}
 	if f, err := os.Open(eventsPath); err == nil {
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -394,9 +402,21 @@ func (s *Supervisor) pollIMessage(ctx context.Context) error {
 	return nil
 }
 
+// Nudge asks for a poll now; nudges while one is pending coalesce.
+func (m *IMessage) Nudge() {
+	select {
+	case m.nudge <- struct{}{}:
+	default:
+	}
+}
+
 // runIMessage polls until ctx ends, logging each change of error state once.
 func (s *Supervisor) runIMessage(ctx context.Context) {
-	t := time.NewTicker(imessagePoll)
+	every := imessagePoll
+	if s.cfg.IMessageWebhook != "" {
+		every = imessageBackup
+	}
+	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
 		err := s.pollIMessage(ctx)
@@ -419,8 +439,20 @@ func (s *Supervisor) runIMessage(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case <-s.imessage.nudge:
 		}
 	}
+}
+
+// imessageWebhook serves BlueBubbles' webhook: any POST is a nudge to poll.
+func (s *Supervisor) imessageWebhook() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /bluebubbles/webhook", func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+		s.imessage.Nudge()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	return mux
 }
 
 // imessageAuth: only the Claude session in the configured tab, with its

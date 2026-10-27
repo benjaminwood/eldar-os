@@ -94,6 +94,22 @@ in
         default = null;
         description = "The BlueBubbles server's password, readable by the supervisor.";
       };
+      webhook = {
+        port = lib.mkOption {
+          type = lib.types.nullOr lib.types.port;
+          default = null;
+          description = ''
+            Port for BlueBubbles' new-message webhook
+            (http://<this machine>:<port>/bluebubbles/webhook), which makes
+            the supervisor poll at once. null = poll only.
+          '';
+        };
+        allowFrom = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Addresses of the BlueBubbles server(s): the only ones the firewall lets reach the port.";
+        };
+      };
     };
     runAs = lib.mkOption {
       type = lib.types.str;
@@ -180,6 +196,11 @@ in
       };
     };
 
+    # Only the BlueBubbles server reaches the webhook port (from the LAN).
+    networking.firewall.extraInputRules = lib.mkIf (cfg.imessage.webhook.port != null && cfg.imessage.webhook.allowFrom != [ ]) ''
+      ip saddr { ${lib.concatStringsSep ", " cfg.imessage.webhook.allowFrom} } tcp dport ${toString cfg.imessage.webhook.port} accept
+    '';
+
     systemd.services.supervisor = {
       description = "Supervisor: credentials, approvals, and running the agent's commands";
       wantedBy = [ "multi-user.target" ];
@@ -205,6 +226,8 @@ in
       } // lib.optionalAttrs (cfg.imessage.configFile != null) {
         SUPERVISOR_IMESSAGE = cfg.imessage.configFile;
         SUPERVISOR_IMESSAGE_PASSWORD_FILE = cfg.imessage.passwordFile;
+      } // lib.optionalAttrs (cfg.imessage.webhook.port != null) {
+        SUPERVISOR_IMESSAGE_WEBHOOK = ":${toString cfg.imessage.webhook.port}";
       };
       serviceConfig = {
         ExecStart = "${lib.getExe cfg.package} serve";

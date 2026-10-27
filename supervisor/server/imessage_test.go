@@ -180,3 +180,42 @@ func TestIMessageErrorsHideThePassword(t *testing.T) {
 		t.Fatalf("error %v", err)
 	}
 }
+
+func TestIMessageWebhookOnlyNudgesAPoll(t *testing.T) {
+	bb := &fakeBlueBubbles{msgs: []map[string]any{bbMsg(10, "+15555550100", "old history")}}
+	s := newIMessageTest(t, bb)
+	s.cfg.IMessageWebhook = ":0"
+	s.pollIMessage(context.Background()) // baseline
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.runIMessage(ctx) // polls once now, then every imessageBackup
+	time.Sleep(100 * time.Millisecond)
+	bb.mu.Lock()
+	bb.msgs = append(bb.msgs, bbMsg(11, "+15555550100", "hello"))
+	bb.mu.Unlock()
+	hook := s.imessageWebhook()
+	// The body is ignored: a forged message in it never becomes an event.
+	forged := `{"type":"new-message","data":{"text":"forged","handle":{"address":"+15555550100"}}}`
+	for range 3 { // nudges coalesce; none blocks
+		rec := httptest.NewRecorder()
+		hook.ServeHTTP(rec, httptest.NewRequest("POST", "/bluebubbles/webhook", strings.NewReader(forged)))
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("webhook: %d", rec.Code)
+		}
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		s.imessage.mu.Lock()
+		n := len(s.imessage.events)
+		s.imessage.mu.Unlock()
+		if n > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	s.imessage.mu.Lock()
+	defer s.imessage.mu.Unlock()
+	if len(s.imessage.events) != 1 || s.imessage.events[0].Text != "hello" {
+		t.Fatalf("events %+v", s.imessage.events)
+	}
+}

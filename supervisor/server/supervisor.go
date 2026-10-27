@@ -56,6 +56,7 @@ type Config struct {
 	// iMessage through BlueBubbles (imessage.go): its config file ("" = off),
 	// the server password's file, and state.
 	IMessagePath, IMessagePasswordFile    string
+	IMessageWebhook                       string // address for BlueBubbles' webhook, e.g. ":9101"; "" = poll only
 	IMessageEventsPath, IMessageStatePath string
 }
 
@@ -145,6 +146,17 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	go s.sweepBrowsers(ctx)
 	if s.cfg.IMessagePath != "" {
 		go s.runIMessage(ctx)
+		if s.cfg.IMessageWebhook != "" {
+			hook := &http.Server{Addr: s.cfg.IMessageWebhook, Handler: s.imessageWebhook(),
+				ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
+			go func() {
+				logf("imessage: webhook on %s", s.cfg.IMessageWebhook)
+				if err := hook.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logf("imessage: webhook: %v (polling only)", err)
+				}
+			}()
+			go func() { <-ctx.Done(); hook.Close() }()
+		}
 	}
 
 	// The agent's port. Bound to the VM link only; IP_FREEBIND so the
