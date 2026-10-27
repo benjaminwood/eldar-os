@@ -17,9 +17,10 @@ import (
 
 // fakeBlueBubbles serves the few API calls the bridge makes.
 type fakeBlueBubbles struct {
-	mu   sync.Mutex
-	msgs []map[string]any // the Mac's message history, oldest first
-	sent []map[string]any
+	mu    sync.Mutex
+	msgs  []map[string]any // the Mac's message history, oldest first
+	sent  []map[string]any
+	chats map[string]map[string]any // chat GUID -> chat (with participants)
 }
 
 func (f *fakeBlueBubbles) handler(t *testing.T) http.Handler {
@@ -47,6 +48,14 @@ func (f *fakeBlueBubbles) handler(t *testing.T) http.Handler {
 				}
 			}
 			data = out
+		case strings.HasPrefix(r.URL.Path, "/api/v1/chat/"):
+			c, ok := f.chats[strings.TrimPrefix(r.URL.Path, "/api/v1/chat/")]
+			if !ok {
+				w.WriteHeader(404)
+				json.NewEncoder(w).Encode(map[string]any{"status": 404, "message": "Chat does not exist!"})
+				return
+			}
+			data = c
 		case r.URL.Path == "/api/v1/message/text":
 			f.sent = append(f.sent, body)
 			data = map[string]any{"guid": "sent"}
@@ -78,7 +87,7 @@ func newIMessageTest(t *testing.T, bb *fakeBlueBubbles) *Supervisor {
 	srv := httptest.NewServer(bb.handler(t))
 	t.Cleanup(srv.Close)
 	dir := t.TempDir()
-	cfg := "server: " + srv.URL + "\nsession: { workspace: primary, tab: Family }\ncontacts:\n  - { name: Ben, address: \"(555) 555-0100\" }\n"
+	cfg := "server: " + srv.URL + "\nsession: { workspace: primary, tab: Family }\ncontacts:\n  - { name: Ben, address: \"(555) 555-0100\" }\n  - { name: Sam, address: \"+15555550111\", direct: false }\n"
 	os.WriteFile(filepath.Join(dir, "imessage.yaml"), []byte(cfg), 0o600)
 	os.WriteFile(filepath.Join(dir, "pw"), []byte("pw\n"), 0o600)
 	s.imessage = NewIMessage(filepath.Join(dir, "imessage.yaml"), filepath.Join(dir, "pw"),
@@ -98,8 +107,25 @@ func TestNormAddress(t *testing.T) {
 	}
 }
 
-func TestIMessagePollDeliversOnlyAllowedDirectMessages(t *testing.T) {
-	bb := &fakeBlueBubbles{msgs: []map[string]any{bbMsg(10, "+15555550100", "old history")}}
+// group puts a message in group chat guid.
+func group(guid string) func(map[string]any) {
+	return func(m map[string]any) { m["chats"] = []map[string]any{{"guid": guid, "style": 43}} }
+}
+
+func bbChat(guid, name string, members ...string) map[string]any {
+	var ps []map[string]any
+	for _, a := range members {
+		ps = append(ps, map[string]any{"address": a})
+	}
+	return map[string]any{"guid": guid, "style": 43, "displayName": name, "participants": ps}
+}
+
+func TestIMessagePollDeliversOnlyAllowedChats(t *testing.T) {
+	bb := &fakeBlueBubbles{msgs: []map[string]any{bbMsg(10, "+15555550100", "old history")}, chats: map[string]map[string]any{
+		"iMessage;+;fam":     bbChat("iMessage;+;fam", "Us", "+15555550100", "+15555550111"),
+		"iMessage;+;mixed":   bbChat("iMessage;+;mixed", "", "+15555550100", "+19999999999"),
+		"iMessage;+;samonly": bbChat("iMessage;+;samonly", "", "+15555550111"),
+	}}
 	s := newIMessageTest(t, bb)
 	ctx := context.Background()
 	if err := s.pollIMessage(ctx); err != nil { // the first poll only finds where history ends
@@ -112,21 +138,26 @@ func TestIMessagePollDeliversOnlyAllowedDirectMessages(t *testing.T) {
 	bb.msgs = append(bb.msgs,
 		bbMsg(11, "+15555550100", "hello"),
 		bbMsg(12, "+19999999999", "stranger danger"),
-		bbMsg(13, "+15555550100", "in a group", func(m map[string]any) {
-			m["chats"] = []map[string]any{{"guid": "iMessage;+;chat1", "style": 43}}
-		}),
+		bbMsg(13, "+15555550100", "group with a stranger", group("iMessage;+;mixed")),
 		bbMsg(14, "+15555550100", "sent by me", func(m map[string]any) { m["isFromMe"] = true }),
 		bbMsg(15, "+15555550100", "", func(m map[string]any) { m["associatedMessageType"] = 2000 }),
+		bbMsg(16, "+15555550111", "sam directly"),
+		bbMsg(17, "+15555550111", "sam alone in a group", group("iMessage;+;samonly")),
+		bbMsg(18, "+15555550111", "sam in the family group", group("iMessage;+;fam")),
 	)
 	bb.mu.Unlock()
 	if err := s.pollIMessage(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ev := s.imessage.events
-	if len(ev) != 1 || ev[0].Text != "hello" || ev[0].Name != "Ben" || ev[0].From != "+15555550100" {
+	if len(ev) != 2 || ev[0].Text != "hello" || ev[0].Name != "Ben" || ev[0].From != "+15555550100" || ev[0].Group {
 		t.Fatalf("events %+v", ev)
 	}
-	if s.imessage.state.LastRowID != 15 {
+	if g := ev[1]; g.Text != "sam in the family group" || !g.Group || g.Chat != "iMessage;+;fam" || g.ChatName != "Us" ||
+		strings.Join(g.Members, ",") != "Ben,Sam" || g.Name != "Sam" {
+		t.Fatalf("group event %+v", g)
+	}
+	if s.imessage.state.LastRowID != 18 {
 		t.Fatalf("last row %d", s.imessage.state.LastRowID)
 	}
 	audit, _ := os.ReadFile(s.cfg.AuditPath)
@@ -134,13 +165,17 @@ func TestIMessagePollDeliversOnlyAllowedDirectMessages(t *testing.T) {
 		t.Fatalf("audit should name the ignored sender, never their text:\n%s", audit)
 	}
 	again := NewIMessage(s.imessage.path, s.imessage.passwordFile, s.imessage.eventsPath, s.imessage.statePath)
-	if len(again.events) != 1 || again.state.LastRowID != 15 || again.chats["+15555550100"] != "iMessage;-;+15555550100" {
+	if len(again.events) != 2 || again.state.LastRowID != 18 || again.chats["+15555550100"] != "iMessage;-;+15555550100" ||
+		again.chats["+15555550111"] != "" {
 		t.Fatalf("reload: %+v", again.state)
 	}
 }
 
 func TestIMessageSendOnlyToAllowedFromTheSession(t *testing.T) {
-	bb := &fakeBlueBubbles{}
+	bb := &fakeBlueBubbles{chats: map[string]map[string]any{
+		"iMessage;+;fam":   bbChat("iMessage;+;fam", "", "+15555550100", "+15555550111"),
+		"iMessage;+;mixed": bbChat("iMessage;+;mixed", "", "+15555550100", "+19999999999"),
+	}}
 	s := newIMessageTest(t, bb)
 	h := s.agentHandler()
 	send := func(session, key, to string) int {
@@ -160,13 +195,22 @@ func TestIMessageSendOnlyToAllowedFromTheSession(t *testing.T) {
 	if c := send("s1", "k", "+19999999999"); c != 403 {
 		t.Fatalf("stranger: %d", c)
 	}
+	if c := send("s1", "k", "+15555550111"); c != 403 {
+		t.Fatalf("a group-only contact, directly: %d", c)
+	}
+	if c := send("s1", "k", "iMessage;+;mixed"); c != 403 {
+		t.Fatalf("a group with a stranger: %d", c)
+	}
+	if c := send("s1", "k", "iMessage;+;fam"); c != 200 {
+		t.Fatalf("the family group: %d", c)
+	}
 	if c := send("other", "k", "+15555550100"); c != 403 {
 		t.Fatalf("another session: %d", c)
 	}
 	if c := send("s1", "different-key", "+15555550100"); c != 403 {
 		t.Fatalf("another key: %d", c)
 	}
-	if len(bb.sent) != 1 {
+	if len(bb.sent) != 2 || bb.sent[1]["chatGuid"] != "iMessage;+;fam" {
 		t.Fatalf("refused sends reached BlueBubbles: %+v", bb.sent)
 	}
 }

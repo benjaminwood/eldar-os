@@ -186,8 +186,11 @@ every use) names the server, the herdr workspace and tab of the one Claude
 session that may use it, and the contacts it may exchange messages with; the
 server's password is a sops secret only the supervisor reads.
 
-- In: the supervisor polls BlueBubbles and keeps messages from allowed
-  contacts (direct chats only) in `imessage.jsonl` until the session's
+- Allowed chats: a direct chat with a contact (unless it's marked
+  `direct: false`), and a group chat whose members are all contacts, at
+  least one of them direct.
+- In: the supervisor polls BlueBubbles and keeps messages in allowed chats
+  in `imessage.jsonl` until the session's
   `imessage` channel (`supervisor channel imessage`) takes them, so nothing
   is lost while it restarts. Anyone else's messages are dropped; the audit
   records only who sent them. With `imessage.webhook`, BlueBubbles'
@@ -195,8 +198,8 @@ server's password is a sops secret only the supervisor reads.
   `http://<this machine>:<port>/bluebubbles/webhook`) makes it poll at once,
   and the regular poll slows to every 30 s; without, it polls every 3 s. The
   webhook's body is ignored, and the firewall admits only the Mac.
-- Out: the channel's `reply`, `history` and `contacts` tools, to and with
-  allowed contacts only. Each message in or out is audited.
+- Out: the channel's `reply`, `history` and `contacts` tools, in allowed
+  chats only. Each message in or out is audited.
 
 On this machine it's Quickbeam's, the family agent (`quickbeam-primary` in
 `hosts/eldar-os/eldar-vm.nix`): restricted mode, its own Claude config, and

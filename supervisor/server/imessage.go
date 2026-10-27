@@ -25,13 +25,13 @@ import (
 // agent with its own Apple ID (a family agent, not Eldar). The supervisor is
 // the only path between them, as with Ben's chat:
 //
-//   - In: it polls BlueBubbles for new messages and keeps those from allowed
-//     contacts until the agent's `imessage` channel takes them from
-//     GET /imessage/stream. Messages from anyone else are dropped, and only
+//   - In: it polls BlueBubbles for new messages and keeps those in allowed
+//     chats until the agent's `imessage` channel takes them from
+//     GET /imessage/stream. Messages from anywhere else are dropped, and only
 //     their sender is audited.
-//   - Out: POST /imessage/send and GET /imessage/history, to and with allowed
-//     contacts only. The supervisor adds BlueBubbles' password; the agent
-//     never sees it.
+//   - Out: POST /imessage/send and GET /imessage/history, in allowed chats
+//     only. The supervisor adds BlueBubbles' password; the agent never sees
+//     it.
 //
 // Only the Claude session in the configured herdr workspace and tab may use
 // any of it, with its channel's pinned key. A private file names the server,
@@ -41,8 +41,11 @@ import (
 //	session: { workspace: primary, tab: Family }
 //	contacts:
 //	  - { name: Ben, address: "+15555550100" }   # a phone number or an Apple ID email
+//	  - { name: Sam, address: "sam@example.com", direct: false }
 //
-// Direct chats only: group chats are neither delivered nor sent to.
+// Allowed chats: a direct chat with a contact (unless `direct: false`), and a
+// group chat whose members are all contacts, at least one of them direct. So
+// a `direct: false` contact is reached only in a group with a direct one.
 //
 // With a webhook listener (Config.IMessageWebhook), BlueBubbles' new-message
 // webhook makes the supervisor poll at once, and the regular poll slows to a
@@ -63,7 +66,10 @@ const (
 type imessageContact struct {
 	Name    string `yaml:"name"`
 	Address string `yaml:"address"`
+	Direct  *bool  `yaml:"direct"` // may chat one-on-one (default true)
 }
+
+func (c imessageContact) direct() bool { return c.Direct == nil || *c.Direct }
 
 type imessageFile struct {
 	Server  string `yaml:"server"`
@@ -76,14 +82,17 @@ type imessageFile struct {
 
 // IMessageEvent is one incoming message from an allowed contact.
 type IMessageEvent struct {
-	ID          int    `json:"id"`
-	TS          int64  `json:"ts"`
-	From        string `json:"from"` // the sender's address, normalised
-	Name        string `json:"name"`
-	Chat        string `json:"chat"` // BlueBubbles chat GUID
-	GUID        string `json:"guid"` // the message's GUID
-	Text        string `json:"text"`
-	Attachments int    `json:"attachments,omitempty"`
+	ID          int      `json:"id"`
+	TS          int64    `json:"ts"`
+	From        string   `json:"from"` // the sender's address, normalised
+	Name        string   `json:"name"`
+	Chat        string   `json:"chat"` // BlueBubbles chat GUID
+	ChatName    string   `json:"chatName,omitempty"`
+	Group       bool     `json:"group,omitempty"`
+	Members     []string `json:"members,omitempty"` // a group's members, by name
+	GUID        string   `json:"guid"`              // the message's GUID
+	Text        string   `json:"text"`
+	Attachments int      `json:"attachments,omitempty"`
 }
 
 type imessageState struct {
@@ -101,7 +110,8 @@ type IMessage struct {
 	nextID  int
 	subs    map[chan IMessageEvent]struct{}
 	stream  *chatStream
-	chats   map[string]string // address -> chat GUID, as last seen
+	chats   map[string]string     // address -> direct chat GUID, as last seen
+	groups  map[string]bbChatInfo // chat GUID -> members, briefly cached
 	lastErr string
 	nudge   chan struct{} // poll now (the webhook)
 }
@@ -109,7 +119,8 @@ type IMessage struct {
 func NewIMessage(path, passwordFile, eventsPath, statePath string) *IMessage {
 	m := &IMessage{path: path, passwordFile: passwordFile, eventsPath: eventsPath, statePath: statePath,
 		http: &http.Client{Timeout: 30 * time.Second}, nextID: 1,
-		subs: map[chan IMessageEvent]struct{}{}, chats: map[string]string{}, nudge: make(chan struct{}, 1)}
+		subs: map[chan IMessageEvent]struct{}{}, chats: map[string]string{}, groups: map[string]bbChatInfo{},
+		nudge: make(chan struct{}, 1)}
 	if f, err := os.Open(eventsPath); err == nil {
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -117,7 +128,9 @@ func NewIMessage(path, passwordFile, eventsPath, statePath string) *IMessage {
 			var e IMessageEvent
 			if json.Unmarshal(sc.Bytes(), &e) == nil {
 				m.events = append(m.events, e)
-				m.chats[e.From] = e.Chat
+				if !e.Group {
+					m.chats[e.From] = e.Chat
+				}
 			}
 		}
 		f.Close()
@@ -189,10 +202,116 @@ func (f imessageFile) contact(addr string) (imessageContact, bool) {
 	addr = normAddress(addr)
 	for _, c := range f.Contacts {
 		if normAddress(c.Address) == addr {
-			return imessageContact{Name: c.Name, Address: addr}, true
+			c.Address = addr
+			return c, true
 		}
 	}
 	return imessageContact{}, false
+}
+
+// bbChatInfo: a chat's kind, name and members (addresses, normalised).
+type bbChatInfo struct {
+	at      time.Time
+	Group   bool
+	Name    string
+	Members []string
+}
+
+// chatInfo fetches a chat's members from BlueBubbles, cached for a minute.
+func (m *IMessage) chatInfo(ctx context.Context, f imessageFile, guid string) (bbChatInfo, error) {
+	m.mu.Lock()
+	ci, ok := m.groups[guid]
+	m.mu.Unlock()
+	if ok && time.Since(ci.at) < time.Minute {
+		return ci, nil
+	}
+	data, err := m.call(ctx, f, http.MethodGet, "chat/"+url.PathEscape(guid), url.Values{"with": {"participants"}}, nil)
+	if err != nil {
+		return ci, err
+	}
+	var c struct {
+		Style        int    `json:"style"`
+		DisplayName  string `json:"displayName"`
+		Participants []struct {
+			Address string `json:"address"`
+		} `json:"participants"`
+	}
+	if err := json.Unmarshal(data, &c); err != nil {
+		return ci, fmt.Errorf("BlueBubbles chat: %v", err)
+	}
+	ci = bbChatInfo{at: time.Now(), Group: c.Style == bbGroupStyle, Name: c.DisplayName}
+	for _, p := range c.Participants {
+		ci.Members = append(ci.Members, normAddress(p.Address))
+	}
+	m.mu.Lock()
+	m.groups[guid] = ci
+	m.mu.Unlock()
+	return ci, nil
+}
+
+// allowedChat decides whether a chat is one the agent may use, and names its
+// members. Direct: its one member is a direct contact. Group: every member is
+// a contact and at least one is direct.
+func (f imessageFile) allowedChat(ci bbChatInfo) ([]string, string) {
+	var names []string
+	direct := false
+	for _, a := range ci.Members {
+		c, ok := f.contact(a)
+		if !ok {
+			return nil, a + " isn't an allowed contact"
+		}
+		names = append(names, c.Name)
+		direct = direct || c.direct()
+	}
+	switch {
+	case len(names) == 0:
+		return nil, "the chat has no members"
+	case !ci.Group && len(names) != 1:
+		return nil, "a direct chat with more than one member"
+	case !direct && ci.Group:
+		return nil, "no member of the group may chat directly"
+	case !direct:
+		return nil, names[0] + " may only be reached in a group"
+	}
+	return names, ""
+}
+
+// resolveChat turns a reply target (an address, or a chat GUID from a
+// message) into an allowed chat's GUID, label and members.
+func (m *IMessage) resolveChat(ctx context.Context, f imessageFile, target string) (guid, label string, members []string, err error) {
+	target = strings.TrimSpace(target)
+	if strings.Contains(target, ";") { // a chat GUID: "iMessage;-;…" or "iMessage;+;chat…"
+		ci, err := m.chatInfo(ctx, f, target)
+		if err != nil {
+			return "", "", nil, err
+		}
+		names, why := f.allowedChat(ci)
+		if why != "" {
+			return "", "", nil, errors.New("not an allowed chat: " + why)
+		}
+		label = names[0]
+		if ci.Group {
+			label = "group " + strings.Join(names, ", ")
+			if ci.Name != "" {
+				label = "group \"" + ci.Name + "\" (" + strings.Join(names, ", ") + ")"
+			}
+		}
+		return target, label, names, nil
+	}
+	c, ok := f.contact(target)
+	if !ok {
+		return "", "", nil, errors.New("not an allowed contact: " + normAddress(target))
+	}
+	if !c.direct() {
+		return "", "", nil, errors.New(c.Name + " may only be reached in a group chat (use its chat)")
+	}
+	m.mu.Lock()
+	guid = m.chats[c.Address]
+	m.mu.Unlock()
+	if guid == "" {
+		guid = "iMessage;-;" + c.Address
+	}
+	return guid, c.Name, []string{c.Name}, nil
 }
 
 func (m *IMessage) saveState() {
@@ -212,7 +331,9 @@ func (m *IMessage) add(e IMessageEvent) IMessageEvent {
 	if len(m.events) > imessageKeep {
 		m.events = m.events[1:]
 	}
-	m.chats[e.From] = e.Chat
+	if !e.Group {
+		m.chats[e.From] = e.Chat
+	}
 	if b, err := json.Marshal(e); err == nil {
 		if f, err := os.OpenFile(m.eventsPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600); err == nil {
 			f.Write(append(b, '\n'))
@@ -365,7 +486,16 @@ func (s *Supervisor) pollIMessage(ctx context.Context) error {
 	if err := json.Unmarshal(data, &msgs); err != nil {
 		return fmt.Errorf("BlueBubbles messages: %v", err)
 	}
+	done := func(upTo int64) { // record progress, so nothing is delivered twice
+		m.mu.Lock()
+		if upTo > m.state.LastRowID {
+			m.state.LastRowID = upTo
+			m.saveState()
+		}
+		m.mu.Unlock()
+	}
 	for _, b := range msgs {
+		prev := last
 		if b.ROWID > last {
 			last = b.ROWID
 		}
@@ -378,27 +508,36 @@ func (s *Supervisor) pollIMessage(ctx context.Context) error {
 		}
 		from := normAddress(b.Handle.Address)
 		c, ok := f.contact(from)
-		group := b.Chats[0].Style == bbGroupStyle
-		if !ok || group {
-			why := "not an allowed contact"
-			if group {
-				why = "a group chat"
+		chat := b.Chats[0]
+		ci := bbChatInfo{Group: chat.Style == bbGroupStyle, Members: []string{from}}
+		var names []string
+		why := "not an allowed contact"
+		if ok && ci.Group {
+			if ci, err = m.chatInfo(ctx, f, chat.GUID); err != nil {
+				done(prev) // try this message again on the next poll
+				return err
 			}
+		}
+		if ok {
+			names, why = f.allowedChat(ci)
+		}
+		if why != "" {
 			s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage from " + from + " ignored",
 				Decision: "deny", DecisionReason: why + " (the text was dropped)", Mode: "normal"})
 			continue
 		}
-		e := m.add(IMessageEvent{TS: b.DateCreated, From: from, Name: c.Name, Chat: b.Chats[0].GUID,
-			GUID: b.GUID, Text: truncRunes(text, imessageMaxText), Attachments: len(b.Attachments)})
+		ev := IMessageEvent{TS: b.DateCreated, From: from, Name: c.Name, Chat: chat.GUID,
+			GUID: b.GUID, Text: truncRunes(text, imessageMaxText), Attachments: len(b.Attachments)}
+		where := "direct"
+		if ci.Group {
+			ev.Group, ev.ChatName, ev.Members = true, ci.Name, names
+			where = "group with " + strings.Join(names, ", ")
+		}
+		e := m.add(ev)
 		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage from " + c.Name + ": " + truncRunes(e.Text, 200),
-			Decision: "allow", DecisionReason: "allowed contact " + from, Mode: "normal"})
+			Decision: "allow", DecisionReason: "allowed chat (" + where + ")", Mode: "normal"})
 	}
-	m.mu.Lock()
-	if last > m.state.LastRowID {
-		m.state.LastRowID = last
-		m.saveState()
-	}
-	m.mu.Unlock()
+	done(last)
 	return nil
 }
 
@@ -558,7 +697,7 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			return
 		}
 		var b struct {
-			To   string `json:"to"`
+			To   string `json:"to"` // an address, or a chat GUID
 			Text string `json:"text"`
 		}
 		readJSON(r, &b)
@@ -571,55 +710,44 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			sendJSON(w, 400, map[string]any{"error": fmt.Sprintf("message too long (max %d characters)", imessageMaxText)})
 			return
 		}
-		c, ok := f.contact(b.To)
-		if !ok {
-			s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage to " + normAddress(b.To) + ": " + truncRunes(text, 200),
-				Decision: "deny", DecisionReason: "not an allowed contact", SessionID: session, Mode: "normal"})
-			sendJSON(w, 403, map[string]any{"error": "not an allowed contact: " + normAddress(b.To)})
+		chat, label, _, err := m.resolveChat(r.Context(), f, b.To)
+		if err != nil {
+			s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage to " + truncRunes(b.To, 80) + ": " + truncRunes(text, 200),
+				Decision: "deny", DecisionReason: err.Error(), SessionID: session, Mode: "normal"})
+			sendJSON(w, 403, map[string]any{"error": err.Error()})
 			return
 		}
-		m.mu.Lock()
-		chat := m.chats[c.Address]
-		m.mu.Unlock()
-		if chat == "" {
-			chat = "iMessage;-;" + c.Address
-		}
-		_, err := m.call(r.Context(), f, http.MethodPost, "message/text", nil,
+		_, err = m.call(r.Context(), f, http.MethodPost, "message/text", nil,
 			map[string]any{"chatGuid": chat, "tempGuid": randomGUID(), "message": text, "method": "apple-script"})
-		decision, reason := "allow", "allowed contact "+c.Address
+		decision, reason := "allow", "allowed chat"
 		if err != nil {
 			decision, reason = "error", err.Error()
 		}
-		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage to " + c.Name + ": " + truncRunes(text, 200),
+		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage to " + label + ": " + truncRunes(text, 200),
 			Decision: decision, DecisionReason: reason, SessionID: session, Mode: "normal"})
 		if err != nil {
 			sendJSON(w, 502, map[string]any{"error": err.Error()})
 			return
 		}
-		sendJSON(w, 200, map[string]any{"sent": true, "to": c.Address, "name": c.Name})
+		sendJSON(w, 200, map[string]any{"sent": true, "to": label, "name": label})
 	})
-	// Recent messages with one allowed contact, newest last.
+	// Recent messages in one allowed chat (`with`: an address, or a chat GUID),
+	// newest last.
 	mux.HandleFunc("GET /imessage/history", func(w http.ResponseWriter, r *http.Request) {
 		f, _, status, msg := s.imessageAuth(r, false)
 		if status != 0 {
 			sendJSON(w, status, map[string]any{"error": msg})
 			return
 		}
-		c, ok := f.contact(r.URL.Query().Get("with"))
-		if !ok {
-			sendJSON(w, 403, map[string]any{"error": "not an allowed contact"})
+		chat, label, _, err := m.resolveChat(r.Context(), f, r.URL.Query().Get("with"))
+		if err != nil {
+			sendJSON(w, 403, map[string]any{"error": err.Error()})
 			return
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		limit = min(max(limit, 1), 100)
 		if r.URL.Query().Get("limit") == "" {
 			limit = 20
-		}
-		m.mu.Lock()
-		chat := m.chats[c.Address]
-		m.mu.Unlock()
-		if chat == "" {
-			chat = "iMessage;-;" + c.Address
 		}
 		data, err := m.call(r.Context(), f, http.MethodGet, "chat/"+url.PathEscape(chat)+"/message",
 			url.Values{"limit": {strconv.Itoa(limit)}, "sort": {"DESC"}, "with": {"handle"}}, nil)
@@ -635,24 +763,31 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			if b.isAssociated() {
 				continue
 			}
-			from := c.Name
+			from := "?"
+			if b.Handle != nil {
+				from = normAddress(b.Handle.Address)
+				if c, ok := f.contact(from); ok {
+					from = c.Name
+				}
+			}
 			if b.IsFromMe {
 				from = "me"
 			}
 			out = append(out, map[string]any{"from": from, "text": b.Text, "ts": b.DateCreated, "attachments": len(b.Attachments)})
 		}
-		sendJSON(w, 200, map[string]any{"with": c.Address, "name": c.Name, "messages": out})
+		sendJSON(w, 200, map[string]any{"chat": chat, "name": label, "messages": out})
 	})
-	// The allowed contacts, so the agent knows whom it can write to.
+	// The contacts, so the agent knows whom it can write to (direct: false
+	// ones only in a group chat).
 	mux.HandleFunc("GET /imessage/contacts", func(w http.ResponseWriter, r *http.Request) {
 		f, _, status, msg := s.imessageAuth(r, false)
 		if status != 0 {
 			sendJSON(w, status, map[string]any{"error": msg})
 			return
 		}
-		out := []map[string]string{}
+		out := []map[string]any{}
 		for _, c := range f.Contacts {
-			out = append(out, map[string]string{"name": c.Name, "address": normAddress(c.Address)})
+			out = append(out, map[string]any{"name": c.Name, "address": normAddress(c.Address), "direct": c.direct()})
 		}
 		sendJSON(w, 200, map[string]any{"contacts": out})
 	})
