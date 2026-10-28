@@ -218,6 +218,33 @@ On this machine it's Quickbeam's, the family agent (`quickbeam-primary` in
 `hosts/eldar-os/eldar-vm.nix`): restricted mode, its own Claude config, and
 this channel as its only MCP server.
 
+## Lending Eldar's commands to a sandboxed agent
+
+Quickbeam has a shell, but a sandboxed one (Claude Code's Bash sandbox,
+bubblewrap): no network, writes only to its repo, `work/` and `tmp/`, and
+none of Eldar's home, the shared `/tmp`, `/run/user` or the system's
+sockets. What it may do beyond computing is whatever Eldar lends it
+(`supervisor/tools`):
+
+- Eldar lists commands in `~/workspace/quickbeam/tools.yaml` (name, the
+  command it runs, a description, optionally the allowed first arguments
+  and a timeout). Edits apply at once, with no deploy.
+- The tools relay (`supervisor tools-relay`, a user service as Eldar) keeps
+  a stub per granted command on Quickbeam's `PATH` and listens on a Unix
+  socket in Quickbeam's state directory, the one socket its sandbox sees.
+- A stub sends its arguments and stdin to the relay, which runs Eldar's real
+  command as Eldar, in Eldar's environment (its credentials, Docker), with
+  the arguments as an argument list (no shell), and streams stdout, stderr
+  and the exit status back. `supervisor tool --list` shows the grants.
+- So one copy of a tool serves both agents, and a credential it uses never
+  enters the sandbox. Anyone who can text Quickbeam can set off a lent
+  command, so lend narrowly. The relay logs every call.
+
+Unix sockets are all-or-nothing in Claude Code's sandbox on Linux, so the
+settings hide every directory holding a socket Quickbeam mustn't reach.
+After adding a service with a socket outside those, check what the sandbox
+sees (`find / -type s` from Quickbeam's shell).
+
 ## Telling a session its PR is live
 
 A session that opens a PR on the staging repo calls `supervisor_watch_pr`

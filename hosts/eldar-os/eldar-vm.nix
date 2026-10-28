@@ -36,14 +36,37 @@
     # Quickbeam, the family agent (below): its repo, Claude config, settings
     # and only MCP server.
     quickbeam = rec {
+      state = "/var/lib/quickbeam";
       repo = "/var/lib/quickbeam/repo";
       config = "/var/lib/quickbeam/claude";
+      prompt = "You have a shell (Bash), sandboxed: no network, and you can write only your repo and ${state}/work, where data you process belongs (keep it out of the repo, which is your memory). Python (pandas, matplotlib), duckdb, sqlite3, jq and rg are installed. Eldar lends you commands, which act on real things such as a budget: they are on your PATH, and `supervisor tool --list` says what each is for. For anything sizeable, write a command's output to a file in work/ and analyse it with code rather than reading it whole.";
       mcp = pkgs.writeText "quickbeam.mcp.json" (builtins.toJSON {
         mcpServers.imessage = { command = "/run/current-system/sw/bin/supervisor"; args = [ "channel" "imessage" ]; };
       });
       settings = pkgs.writeText "quickbeam-settings.json" (builtins.toJSON {
         permissions.allow = [ "mcp__imessage__reply" "mcp__imessage__react" "mcp__imessage__typing" "mcp__imessage__history" "mcp__imessage__contacts"
-          "Read" "Edit" "Write" "Glob" "Grep" "WebSearch" "WebFetch" ];
+          "Read" "Edit" "Write" "Glob" "Grep" "WebSearch" "WebFetch" "Bash" ];
+        # Its shell: every command in bubblewrap, never outside it. It sees
+        # none of Eldar's home, the shared /tmp (Eldar's temporary files and
+        # browser sockets; it has its own tmp/), /run/user (herdr's and
+        # Docker's sockets), the system's sockets, its own Claude credentials
+        # or the Nix daemon; it has no network (Claude itself still does); it
+        # writes only its repo, work/ and tmp/. Sockets are all-or-nothing on
+        # Linux, so hiding their paths is what keeps it from them; its one way
+        # out is the tools relay's socket.
+        sandbox = {
+          enabled = true; failIfUnavailable = true; allowUnsandboxedCommands = false; autoAllowBashIfSandboxed = true;
+          filesystem = {
+            allowWrite = [ "${state}/work" ];
+            denyRead = [ "/home/eldar" "/tmp" "/dev/shm" "/run/user" "/run/dbus" "/run/systemd" "/run/udev" "/run/ssh-unix-local"
+              config "/nix/var/nix/daemon-socket" "/nix/var/nix/gc-socket" ];
+            denyWrite = [ "${state}/bin" "${state}/toolbox" "${state}/run" config ];
+          };
+          network = { allowAllUnixSockets = true; allowedDomains = [ ]; };
+        };
+        # Programs: the system's, its toolbox (a Nix profile Eldar adds to)
+        # and the commands Eldar lends it (stubs from the tools relay).
+        env.PATH = "${state}/bin:${state}/toolbox/profile/bin:/run/wrappers/bin:/run/current-system/sw/bin";
         # herdr's hook (installed for Eldar): reports the session's ID to
         # herdr, which is how the supervisor knows this is Quickbeam's tab.
         hooks.SessionStart = [{ matcher = "^(startup|resume|clear|compact|fork)$";
@@ -239,24 +262,29 @@
       '';
     };
     # Quickbeam, the family agent: iMessage through the supervisor's
-    # BlueBubbles bridge is all it reaches. Deliberately limited: restricted
-    # mode (no shell or code-running tools, file tools confined to its
-    # repo), only its own channel as MCP server, tools it isn't allowed are
-    # refused rather than asked about, and its own Claude config directory,
-    # so none of the user-level settings, MCP servers or CLAUDE.md load. It
-    # lives outside /home/eldar so no CLAUDE.md above it loads either.
+    # BlueBubbles bridge, a sandboxed shell, and the commands Eldar lends it.
+    # Deliberately limited: restricted mode (only the settings given here
+    # load, file tools confined to its repo and work/), Bash only inside the
+    # sandbox (quickbeam.settings), only its own channel as MCP server, tools
+    # it isn't allowed are refused rather than asked about, and its own
+    # Claude config directory, so none of Eldar's settings, MCP servers or
+    # CLAUDE.md load. It lives outside /home/eldar so no CLAUDE.md above it
+    # loads either.
     systemd.user.services.quickbeam-primary = keepClaude "quickbeam-primary" {
       description = "Keep Quickbeam (the family agent) running";
       tab = "Quickbeam";
       cwd = quickbeam.repo;
       configDir = quickbeam.config;
       args = [ "--restricted" "--permission-mode" "dontAsk"
-        "--tools" "Read,Edit,Write,Glob,Grep,WebSearch,WebFetch"
+        "--tools" "Read,Edit,Write,Glob,Grep,WebSearch,WebFetch,Bash"
+        "--add-dir" "${quickbeam.state}/work"
+        "--append-system-prompt" quickbeam.prompt
         "--settings" "${quickbeam.settings}"
         "--strict-mcp-config" "--mcp-config" "${quickbeam.mcp}"
         "--dangerously-load-development-channels" "server:imessage" ];
       marker = "--restricted";
       env.CLAUDE_CONFIG_DIR = quickbeam.config;
+      env.TMPDIR = "${quickbeam.state}/tmp"; # its own: the shared /tmp is hidden from its shell
       prepare = ''
         set -e
         install -d -m 700 ${quickbeam.config}
@@ -285,7 +313,27 @@
       unitConfig.ConditionUser = "eldar";
       timerConfig = { OnBootSec = "5min"; OnUnitActiveSec = "15min"; };
     };
-    systemd.tmpfiles.rules = [ "d /var/lib/quickbeam 0700 eldar eldar-ws -" ];
+    # Quickbeam's shell runs in Claude Code's sandbox (bubblewrap and socat, below).
+    # Eldar lends it commands through the tools relay: the grants file is
+    # Eldar's, the stubs land in its bin/, and the relay runs the real
+    # command as Eldar (supervisor/tools). Its toolbox is a Nix profile Eldar
+    # adds to; work/ is where it keeps data it processes.
+    systemd.user.services.quickbeam-tools = {
+      description = "Lend Eldar's commands to Quickbeam's sandbox";
+      wantedBy = [ "default.target" ];
+      unitConfig.ConditionUser = "eldar";
+      # The lent commands run with Eldar's environment (rootless Docker, nix).
+      path = [ "/run/current-system/sw" "/etc/profiles/per-user/eldar" ];
+      environment.DOCKER_HOST = "unix://%t/docker.sock";
+      serviceConfig = {
+        ExecStart = "/run/current-system/sw/bin/supervisor tools-relay --grants /home/eldar/workspace/quickbeam/tools.yaml --stubs ${quickbeam.state}/bin --socket ${quickbeam.state}/run/tools.sock";
+        Restart = "always";
+        RestartSec = 5;
+      };
+    };
+    systemd.tmpfiles.rules = [ "d /var/lib/quickbeam 0700 eldar eldar-ws -" ]
+      ++ map (d: "d ${quickbeam.state}/${d} 0755 eldar eldar-ws -") [ "bin" "run" "work" "toolbox" ]
+      ++ [ "d ${quickbeam.state}/tmp 0700 eldar eldar-ws 1d" ];
 
     # Ben works in here as eldar, so his dotfiles apply to both users.
     eldar-os.chezmoi.users = {
@@ -313,6 +361,8 @@
     environment.systemPackages = with pkgs; [
       # general
       git gh ripgrep fd jq bat htop tree vim helix gum direnv tmux fzf xxd file yq-go tokei
+      # Claude Code's Bash sandbox (Quickbeam's)
+      bubblewrap socat
       # on PATH for the plannotator-tui skill (`plannotator-tui herdr open`)
       plannotator-tui
       # runtimes

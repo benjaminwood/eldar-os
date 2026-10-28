@@ -18,6 +18,10 @@
 //	                   GitHub for git and gh in the VM: an owner's ambient token, or Eldar's App
 //	supervisor env [DIR]
 //	                   the ambient environment variables for DIR, for direnv
+//	supervisor tools-relay --grants FILE --stubs DIR
+//	                   lend Eldar's commands to Quickbeam's sandbox (tools package)
+//	supervisor tool NAME [ARGS] | --list
+//	                   in the sandbox: run a lent command through the relay
 //
 // The UIs talk to the admin socket, which only the supervisor-admin group can
 // open; the agent isn't in it.
@@ -60,6 +64,14 @@ func main() {
 			fmt.Fprintln(os.Stderr, "supervisor channel:", err)
 			os.Exit(1)
 		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "tools-relay" {
+		runToolsRelay(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "tool" {
+		runTool(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "aws-login" {
