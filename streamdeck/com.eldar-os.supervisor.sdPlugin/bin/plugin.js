@@ -8,13 +8,25 @@
 // agent can act on this machine). No dependencies: it runs on the Node.js the
 // Stream Deck app ships, and talks to the app over a small WebSocket client.
 //
-// Configuration: ~/Library/Application Support/eldar-os/streamdeck.json,
-// {"server": "https://supervisor.<tailnet>.ts.net"}. The device token comes
-// from pairing (press a key, approve the pairing in the supervisor) and is
-// kept in the plugin's global settings.
+// Holding Approve (half a second) opens a herdr tab instead: it shows the
+// iTerm hotkey window ("Visor"), selects the iTerm tab connected to that herdr,
+// and asks the supervisor to focus the tab there.
+//
+// Configuration: ~/Library/Application Support/eldar-os/streamdeck.json:
+//
+//   {"server": "https://supervisor.<tailnet>.ts.net",
+//    "terminals": {"host": "eldar-os", "eldar": "eldar-vm"},
+//    "approveHold": {"herdr": "host", "tab": "supervisor"}}
+//
+// terminals maps each herdr the supervisor can steer (host: the supervisor's
+// machine, eldar: Eldar's VM) to the ssh destination of the iTerm tab showing
+// it; approveHold is the tab a long press opens (optionally with a
+// "workspace"). The device token comes from pairing (press a key, approve
+// the pairing in the supervisor) and is kept in the plugin's global settings.
 
 "use strict";
 
+const { execFile } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const net = require("node:net");
@@ -105,9 +117,10 @@ let status = "starting"; // starting | unconfigured | pair | pairing | offline |
 let view = null;        // the supervisor's DeviceView while live
 let stream = null;      // AbortController of the event stream
 
-function server() {
-  try { return JSON.parse(fs.readFileSync(CONFIG, "utf8")).server.replace(/\/+$/, ""); } catch { return ""; }
+function config() {
+  try { return JSON.parse(fs.readFileSync(CONFIG, "utf8")); } catch { return {}; }
 }
+function server() { return (config().server || "").replace(/\/+$/, ""); }
 
 function onDeckMessage(m) {
   const action = m.action ? m.action.split(".").pop() : "";
@@ -125,7 +138,12 @@ function onDeckMessage(m) {
       drawn.delete(m.context);
       break;
     case "keyDown":
-      press(m.context, action).catch((e) => { log(`press: ${e.message}`); send({ event: "showAlert", context: m.context }); });
+      if (action === "approve") holdTimer(m.context);
+      else run(m.context, press(m.context, action));
+      break;
+    case "keyUp":
+      // Released before the hold fired: an ordinary press.
+      if (holds.has(m.context)) { clearTimeout(holds.get(m.context)); holds.delete(m.context); run(m.context, press(m.context, action)); }
       break;
     case "systemDidWakeUp":
       start();
@@ -203,6 +221,77 @@ async function press(context, action) {
   });
   if (!res.ok) log(`${action} #${ctl.ref}: HTTP ${res.status} ${await res.text()}`);
   send({ event: res.ok ? "showOk" : "showAlert", context });
+}
+
+function run(context, p) {
+  p.catch((e) => { log(`${keys.get(context)}: ${e.message}`); send({ event: "showAlert", context }); });
+}
+
+// ---- Long press on Approve: open a herdr tab ----
+
+const HOLD_MS = 500;
+const holds = new Map(); // context → timer while Approve is down
+
+function holdTimer(context) {
+  clearTimeout(holds.get(context));
+  holds.set(context, setTimeout(() => {
+    holds.delete(context);
+    run(context, openHerdr(context, config().approveHold));
+  }, HOLD_MS));
+}
+
+// openHerdr asks the supervisor to focus the tab, then brings up the iTerm
+// tab showing that herdr. Focusing is allowed whatever Approve's state.
+async function openHerdr(context, spec) {
+  if (!spec?.herdr || !spec?.tab) throw new Error("no approveHold in the config");
+  if (status !== "live") throw new Error(`not connected (${status})`);
+  const res = await fetch(`${server()}/device/actions/herdr-focus`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${settings.token}`, "Content-Type": "application/json", "X-Supervisor": "1" },
+    body: JSON.stringify({ args: { herdr: spec.herdr, tab: spec.tab, workspace: spec.workspace || "" } }),
+  });
+  const focused = res.ok || (log(`herdr-focus: HTTP ${res.status} ${await res.text()}`), false);
+  await showTerminal(config().terminals?.[spec.herdr]); // even if herdr failed: you'll see why
+  send({ event: focused ? "showOk" : "showAlert", context });
+}
+
+const exec = (file, argv) => new Promise((resolve, reject) =>
+  execFile(file, argv, { timeout: 10000 }, (err, stdout, stderr) => (err ? reject(new Error((stderr || err.message).trim())) : resolve(stdout))));
+
+// showTerminal finds the iTerm session running `ssh <dest>` (by its tty, so
+// tab order and titles don't matter), selects it, and shows its window,
+// revealing the hotkey window if that's where it is.
+async function showTerminal(dest) {
+  if (!dest) throw new Error("no terminal configured for this herdr");
+  const ps = await exec("/bin/ps", ["-axo", "tty=,command="]);
+  const tty = ps.split("\n").map((l) => l.trim().split(/\s+/)).find(([t, cmd, ...rest]) =>
+    t && t !== "??" && path.basename(cmd || "") === "ssh" && rest.some((a) => a === dest || a.endsWith(`@${dest}`)))?.[0];
+  if (!tty) throw new Error(`no iTerm tab is running ssh ${dest}`);
+  const script = `on run argv
+  set want to item 1 of argv
+  tell application "iTerm2"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in sessions of t
+          if tty of s is want then
+            if is hotkey window of w then
+              reveal hotkey window w
+            else
+              activate
+              select w
+            end if
+            select t
+            select s
+            return "ok"
+          end if
+        end repeat
+      end repeat
+    end repeat
+    return "missing"
+  end tell
+end run`;
+  const out = (await exec("/usr/bin/osascript", ["-e", script, `/dev/${tty}`])).trim();
+  if (out !== "ok") throw new Error(`iTerm has no session on /dev/${tty}`);
 }
 
 // pair asks the supervisor to pair this device; Ben approves it there.

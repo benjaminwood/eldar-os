@@ -87,6 +87,7 @@ type Supervisor struct {
 	browserPins  KeyPins
 	ambient      *Ambient
 	devices      *Devices
+	hostAgents   *HostAgents
 	imessage     *IMessage
 	imessagePins KeyPins
 	termSSH      TerminalSSH
@@ -133,6 +134,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		aws:            NewAWS(cfg.AwsConfigPath, cfg.AwsStateDir),
 		ambient:        NewAmbient(cfg.AmbientPath, "/home/"+cfg.AgentUser),
 		devices:        NewDevices(cfg.DevicesPath, n),
+		hostAgents:     NewHostAgents(),
 		imessage:       NewIMessage(cfg.IMessagePath, cfg.IMessagePasswordFile, cfg.IMessageEventsPath, cfg.IMessageStatePath),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},

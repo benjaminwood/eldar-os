@@ -467,9 +467,10 @@ func (c *Client) DeviceView(ctx context.Context, caller DeviceCaller) (DeviceVie
 	return v, err
 }
 
-// DeviceAction runs a press on a device; ref is what the device showed.
-func (c *Client) DeviceAction(ctx context.Context, caller DeviceCaller, action string, ref int) error {
-	return c.do(ctx, "POST", "/admin/devices/action", map[string]any{"caller": caller, "action": action, "ref": ref}, nil)
+// DeviceAction runs a press on a device: ref is the request it showed (approve,
+// deny), args the action's parameters (herdr-focus: herdr, workspace, tab).
+func (c *Client) DeviceAction(ctx context.Context, caller DeviceCaller, action string, ref int, args map[string]string) error {
+	return c.do(ctx, "POST", "/admin/devices/action", map[string]any{"caller": caller, "action": action, "ref": ref, "args": args}, nil)
 }
 
 func (c *Client) RemoveDevice(ctx context.Context, id int) error {

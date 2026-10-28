@@ -16,6 +16,8 @@
 //	                   Eldar passes Ben's answer to another Claude session
 //	supervisor git-credential, supervisor github-token [OWNER]
 //	                   GitHub for git and gh in the VM: an owner's ambient token, or Eldar's App
+//	supervisor host-agent
+//	                   Ben's user service on this machine: jobs that need his login (herdr focus)
 //	supervisor devices [unpair ID]
 //	                   paired devices (a Stream Deck); they pair themselves, Ben approves
 //	supervisor env [DIR]
@@ -110,6 +112,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "github-token" {
 		runGitHubToken(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "host-agent" {
+		runHostAgent(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "devices" {

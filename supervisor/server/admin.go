@@ -350,14 +350,16 @@ func (s *Supervisor) adminHandler() http.Handler {
 			Caller api.DeviceCaller `json:"caller"`
 			Action string           `json:"action"`
 			Ref    int              `json:"ref"`
+			Args   map[string]string `json:"args"`
 		}
 		readJSON(r, &b)
-		if status, msg := s.DeviceAction(b.Caller, b.Action, b.Ref); status != 200 {
+		if status, msg := s.DeviceAction(r.Context(), b.Caller, b.Action, b.Ref, b.Args); status != 200 {
 			sendJSON(w, status, map[string]any{"error": msg})
 			return
 		}
 		sendJSON(w, 200, map[string]any{"ok": true})
 	})
+	s.hostAgents.routes(mux)
 	mux.HandleFunc("DELETE /admin/devices/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.Atoi(r.PathValue("id"))
 		if err != nil || !s.devices.Remove(id) {

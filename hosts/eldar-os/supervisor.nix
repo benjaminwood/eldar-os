@@ -1,10 +1,12 @@
 # The supervisor on this machine (modules/supervisor.nix). Its policy and
 # 1Password configuration are private: they come from the secrets repo.
-{ config, ... }:
+{ config, pkgs, ... }:
 {
   eldar-os.supervisor = {
     enable = true;
     admins = [ "ben" ];
+    # Lets a Stream Deck focus a tab in Ben's herdr here (docs/supervisor.md).
+    hostAgent = { user = "ben"; path = [ (pkgs.callPackage ../../packages/herdr.nix { }) ]; };
     policyFile = "/var/lib/eldar-os/secrets/supervisor/policy.yaml";
     environmentFile = config.sops.secrets.supervisor-env.path;
     # Other machines agents may run commands on: Ben's Mac ("mac").

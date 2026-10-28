@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -80,19 +81,19 @@ func TestDeviceApproveAndDeny(t *testing.T) {
 		t.Fatalf("approve control: %+v", ap)
 	}
 	entry := s.approvals.entries[first]
-	if status, msg := s.DeviceAction(c, "approve", first); status != 200 {
+	if status, msg := s.DeviceAction(context.Background(), c, "approve", first, nil); status != 200 {
 		t.Fatalf("approve: %d %s", status, msg)
 	}
 	if d := <-entry.ch; d != api.Approve {
 		t.Errorf("decision %s", d)
 	}
-	if status, _ := s.DeviceAction(c, "approve", first); status != 409 {
+	if status, _ := s.DeviceAction(context.Background(), c, "approve", first, nil); status != 409 {
 		t.Errorf("second answer to the same request: %d", status)
 	}
-	if status, _ := s.DeviceAction(c, "deny", second); status != 200 {
+	if status, _ := s.DeviceAction(context.Background(), c, "deny", second, nil); status != 200 {
 		t.Errorf("deny: %d", status)
 	}
-	if status, _ := s.DeviceAction(c, "launch", second); status != 400 {
+	if status, _ := s.DeviceAction(context.Background(), c, "launch", second, nil); status != 400 {
 		t.Errorf("unknown action: %d", status)
 	}
 }
@@ -104,10 +105,10 @@ func TestDeviceCantApprovePairing(t *testing.T) {
 	if ap := v.Controls["approve"]; ap.Enabled || ap.Badge != 0 {
 		t.Errorf("pairing offered to approve: %+v", ap)
 	}
-	if status, _ := s.DeviceAction(c, "approve", id); status != 403 {
+	if status, _ := s.DeviceAction(context.Background(), c, "approve", id, nil); status != 403 {
 		t.Errorf("device approved a pairing: %d", status)
 	}
-	if status, _ := s.DeviceAction(c, "deny", id); status != 200 {
+	if status, _ := s.DeviceAction(context.Background(), c, "deny", id, nil); status != 200 {
 		t.Errorf("device couldn't deny a pairing: %d", status)
 	}
 }
@@ -131,10 +132,10 @@ func TestDeviceApproveOffWhileAgentsReachMachine(t *testing.T) {
 			if ap := v.Controls["approve"]; ap.Enabled || ap.Badge != 1 {
 				t.Errorf("approve: %+v", ap)
 			}
-			if status, _ := s.DeviceAction(c, "approve", id); status != 403 {
+			if status, _ := s.DeviceAction(context.Background(), c, "approve", id, nil); status != 403 {
 				t.Errorf("approved anyway: %d", status)
 			}
-			if status, _ := s.DeviceAction(c, "deny", id); status != 200 {
+			if status, _ := s.DeviceAction(context.Background(), c, "deny", id, nil); status != 200 {
 				t.Errorf("deny: %d", status)
 			}
 		})

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -55,7 +56,7 @@ type devicesFile struct {
 const pairKind = "device_pair"
 
 // deviceActions is what a device may send.
-var deviceActions = []string{"approve", "deny"}
+var deviceActions = []string{"approve", "deny", "herdr-focus"}
 
 func NewDevices(path string, n *Notifier) *Devices {
 	d := &Devices{path: path, n: n, next: 1}
@@ -237,16 +238,23 @@ func (s *Supervisor) deviceView(dev api.Device, browserDriven bool) api.DeviceVi
 	return v
 }
 
-// DeviceAction runs a press. ref is what the device showed it would act on,
-// so a request that arrived after the device last updated isn't answered by
-// mistake.
-func (s *Supervisor) DeviceAction(c api.DeviceCaller, action string, ref int) (int, string) {
+// DeviceAction runs a press. For approve and deny, ref is the request the
+// device showed, so one that arrived since isn't answered by mistake;
+// herdr-focus takes args herdr (host | eldar), tab and optionally workspace.
+func (s *Supervisor) DeviceAction(ctx context.Context, c api.DeviceCaller, action string, ref int, args map[string]string) (int, string) {
 	dev, ok := s.devices.Authenticate(c.Token, c.Node)
 	if !ok {
 		return 401, "unknown device"
 	}
 	if !slices.Contains(deviceActions, action) {
 		return 400, fmt.Sprintf("unknown action %q", action)
+	}
+	if action == "herdr-focus" {
+		// Only changes what Ben is looking at, so it's always allowed.
+		if err := s.focusHerdrTab(ctx, args["herdr"], args["workspace"], args["tab"]); err != nil {
+			return 502, err.Error()
+		}
+		return 200, ""
 	}
 	p, ok := s.approvals.Get(ref)
 	if !ok {

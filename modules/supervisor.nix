@@ -30,6 +30,22 @@ in
       default = [ ];
       description = "Users who may use the admin socket (TUI, web UI).";
     };
+    hostAgent = {
+      user = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Run `supervisor host-agent` as this admin (a user service): fixed jobs
+          that need their login on this machine, such as a Stream Deck focusing a
+          tab in their herdr. The supervisor itself stays sandboxed.
+        '';
+      };
+      path = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = "Packages its jobs use (herdr).";
+      };
+    };
     web = {
       enable = lib.mkEnableOption "the web UI on the tailnet (its own node, via tsnet)";
       hostname = lib.mkOption {
@@ -154,6 +170,20 @@ in
 
     users.users.supervisor-web = lib.mkIf cfg.web.enable { isSystemUser = true; group = "supervisor-web"; };
     users.groups.supervisor-web = lib.mkIf cfg.web.enable { };
+
+    # The host agent (supervisor/server/hostagent.go): runs in the admin's
+    # user manager, so only while they have a session (no lingering).
+    systemd.user.services.supervisor-host-agent = lib.mkIf (cfg.hostAgent.user != null) {
+      description = "Supervisor host agent (jobs that need the admin's login)";
+      wantedBy = [ "default.target" ];
+      unitConfig.ConditionUser = cfg.hostAgent.user;
+      path = cfg.hostAgent.path;
+      serviceConfig = {
+        ExecStart = "${lib.getExe cfg.package} host-agent";
+        Restart = "always";
+        RestartSec = 5;
+      };
+    };
 
     # The web UI: joins the tailnet as its own node and relays to the admin
     # socket. Admits only the allowed tailnet user's untagged devices, behind

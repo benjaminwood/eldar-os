@@ -21,7 +21,8 @@ import (
 //
 //	POST /device/pair              {name} → {device, token}, once Ben approves
 //	GET  /device/events            what to show, as server-sent events ("view")
-//	POST /device/actions/{action}  {ref} a press: approve | deny
+//	POST /device/actions/{action}  a press: approve or deny {ref}, or
+//	                               herdr-focus {args: {herdr, workspace, tab}}| deny
 //
 // The token goes in "Authorization: Bearer …"; writes also need X-Supervisor: 1.
 func (s *server) deviceRoutes() http.Handler {
@@ -87,12 +88,13 @@ func (s *server) devicePair(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deviceAction(w http.ResponseWriter, r *http.Request) {
 	b, ok := readBody[struct {
-		Ref int `json:"ref"`
+		Ref  int               `json:"ref"`
+		Args map[string]string `json:"args"`
 	}](w, r)
 	if !ok {
 		return
 	}
-	ok2(w, s.cfg.Client.DeviceAction(r.Context(), caller(r), r.PathValue("action"), b.Ref))
+	ok2(w, s.cfg.Client.DeviceAction(r.Context(), caller(r), r.PathValue("action"), b.Ref, b.Args))
 }
 
 // deviceEvents sends the device's view on connect and whenever the
