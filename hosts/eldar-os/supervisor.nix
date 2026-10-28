@@ -18,7 +18,7 @@
       configFile = "/var/lib/eldar-os/secrets/supervisor/imessage.yaml";
       passwordFile = config.sops.secrets.bluebubbles-password.path;
       # The Mac's new-message webhook: an immediate poll instead of within 30 s.
-      webhook = { port = 9101; allowFrom = [ "192.168.1.27" ]; };
+      webhook = { port = 9101; allowFrom = [ "192.168.1.118" ]; };
     };
     web = {
       enable = true;
