@@ -17,10 +17,11 @@ import (
 
 // fakeBlueBubbles serves the few API calls the bridge makes.
 type fakeBlueBubbles struct {
-	mu    sync.Mutex
-	msgs  []map[string]any // the Mac's message history, oldest first
-	sent  []map[string]any
-	chats map[string]map[string]any // chat GUID -> chat (with participants)
+	mu           sync.Mutex
+	msgs         []map[string]any // the Mac's message history, oldest first
+	noPrivateAPI bool             // the Private API helper isn't connected
+	sent         []map[string]any
+	chats        map[string]map[string]any // chat GUID -> chat (with participants)
 }
 
 func (f *fakeBlueBubbles) handler(t *testing.T) http.Handler {
@@ -56,6 +57,11 @@ func (f *fakeBlueBubbles) handler(t *testing.T) http.Handler {
 				return
 			}
 			data = c
+		case r.URL.Path == "/api/v1/message/text" && body["method"] == "private-api" && f.noPrivateAPI:
+			w.WriteHeader(500)
+			json.NewEncoder(w).Encode(map[string]any{"status": 500, "message": "Please make sure you have completed the setup for the Private API, and your helper is connected!",
+				"error": map[string]any{"type": "iMessage Error", "message": "iMessage Private API Helper is not connected!"}})
+			return
 		case r.URL.Path == "/api/v1/message/text":
 			f.sent = append(f.sent, body)
 			data = map[string]any{"guid": "sent"}
@@ -236,6 +242,18 @@ func TestIMessageSendOnlyToAllowedFromTheSession(t *testing.T) {
 	}
 	if len(bb.sent) != 2 || bb.sent[1]["chatGuid"] != "iMessage;+;fam" {
 		t.Fatalf("refused sends reached BlueBubbles: %+v", bb.sent)
+	}
+	if bb.sent[0]["method"] != "private-api" {
+		t.Fatalf("sent with %v, want the Private API", bb.sent[0]["method"])
+	}
+	bb.mu.Lock()
+	bb.noPrivateAPI = true // the helper drops out: send with AppleScript, once
+	bb.mu.Unlock()
+	if c := send("s1", "k", "+15555550100"); c != 200 {
+		t.Fatalf("without the helper: %d", c)
+	}
+	if len(bb.sent) != 3 || bb.sent[2]["method"] != "apple-script" {
+		t.Fatalf("fallback %+v", bb.sent)
 	}
 }
 

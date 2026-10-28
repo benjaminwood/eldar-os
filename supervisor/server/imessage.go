@@ -414,6 +414,25 @@ func (m *IMessage) call(ctx context.Context, f imessageFile, method, path string
 	return out.Data, nil
 }
 
+// sendText sends through BlueBubbles' Private API (its helper inside Messages),
+// which is quicker than AppleScript and never stops at a macOS permission
+// prompt. When BlueBubbles says the Private API isn't set up or its helper
+// isn't connected, it sends with AppleScript instead. Any other failure,
+// including a timeout, is returned as is: the message may have gone out, and
+// trying again could send it twice.
+func (m *IMessage) sendText(ctx context.Context, f imessageFile, chat, text string) error {
+	send := func(method string) error {
+		_, err := m.call(ctx, f, http.MethodPost, "message/text", nil,
+			map[string]any{"chatGuid": chat, "tempGuid": randomGUID(), "message": text, "method": method})
+		return err
+	}
+	err := send("private-api")
+	if err != nil && strings.HasPrefix(err.Error(), "BlueBubbles: ") && strings.Contains(err.Error(), "Private API") {
+		return send("apple-script")
+	}
+	return err
+}
+
 // bbMessage is the part of a BlueBubbles message we use.
 type bbMessage struct {
 	ROWID                 int64  `json:"originalROWID"`
@@ -746,8 +765,7 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			sendJSON(w, 403, map[string]any{"error": err.Error()})
 			return
 		}
-		_, err = m.call(r.Context(), f, http.MethodPost, "message/text", nil,
-			map[string]any{"chatGuid": chat, "tempGuid": randomGUID(), "message": text, "method": "apple-script"})
+		err = m.sendText(r.Context(), f, chat, text)
 		decision, reason := "allow", "allowed chat"
 		if err != nil {
 			decision, reason = "error", err.Error()

@@ -201,7 +201,14 @@ server's password is a sops secret only the supervisor reads.
   and the regular poll slows to every 30 s; without, it polls every 3 s. The
   webhook's body is ignored, and the firewall admits only the Mac.
 - Out: the channel's `reply`, `history` and `contacts` tools, in allowed
-  chats only. Each message in or out is audited.
+  chats only. Each message in or out is audited. Replies go through
+  BlueBubbles' Private API when it's set up (its helper in Messages: quicker,
+  and no macOS permission prompts), and through AppleScript when BlueBubbles
+  says the helper isn't connected. A timeout is never retried, since the
+  message may have gone out.
+- Moving BlueBubbles to another Mac or account: the bridge notices that the
+  new Messages database numbers its messages from lower down, and starts
+  from its newest message.
 
 On this machine it's Quickbeam's, the family agent (`quickbeam-primary` in
 `hosts/eldar-os/eldar-vm.nix`): restricted mode, its own Claude config, and
