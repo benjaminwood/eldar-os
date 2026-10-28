@@ -72,6 +72,7 @@ func runServe(args []string) {
 		RelayPath:             state + "/relay.jsonl",
 		RelayStatePath:        state + "/relay-state.json",
 		WatchesPath:           state + "/watches.json",
+		DevicesPath:           state + "/devices.json",
 		HostAllowPath:         state + "/host-allow.json",
 		AwsConfigPath:         os.Getenv("SUPERVISOR_AWS_CONFIG"),
 		AwsStateDir:           state + "/aws",

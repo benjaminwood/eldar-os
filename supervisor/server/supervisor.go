@@ -46,6 +46,7 @@ type Config struct {
 	ChatPath, ChatStatePath   string
 	RelayPath, RelayStatePath string
 	WatchesPath               string
+	DevicesPath               string // paired devices (devices.go); "" = kept in memory only
 	TerminalSSH               TerminalSSH            // live terminals into the VM
 	GitHub                    *GitHubApp             // Eldar's GitHub App; nil = none
 	Hosts                     map[string]*RemoteHost // remote hosts by name (hosts.go); "mac" is Ben's Mac
@@ -85,6 +86,7 @@ type Supervisor struct {
 	aws          *AWS
 	browserPins  KeyPins
 	ambient      *Ambient
+	devices      *Devices
 	imessage     *IMessage
 	imessagePins KeyPins
 	termSSH      TerminalSSH
@@ -130,6 +132,7 @@ func New(cfg Config, profiles *Profiles, runner FileRunner) (*Supervisor, error)
 		browsers:       NewBrowsers(),
 		aws:            NewAWS(cfg.AwsConfigPath, cfg.AwsStateDir),
 		ambient:        NewAmbient(cfg.AmbientPath, "/home/"+cfg.AgentUser),
+		devices:        NewDevices(cfg.DevicesPath, n),
 		imessage:       NewIMessage(cfg.IMessagePath, cfg.IMessagePasswordFile, cfg.IMessageEventsPath, cfg.IMessageStatePath),
 		runner:         runner,
 		grantOverrides: map[int]api.GrantInput{},

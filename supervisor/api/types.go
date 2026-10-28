@@ -125,6 +125,7 @@ type State struct {
 	Hosts         []HostStatus   `json:"hosts"`
 	BrowserGrants []BrowserGrant `json:"browserGrants"`
 	Crons         []Cron         `json:"crons"`
+	Devices       []Device       `json:"devices"`
 	Viewers       int            `json:"viewers"`
 }
 
@@ -359,4 +360,42 @@ func (e AuditEntry) CredsSummary() string {
 		}
 		return out
 	}
+}
+
+// Device is a physical control paired with the supervisor (a Stream Deck on
+// Ben's Mac). It reaches the supervisor through the web UI's tailnet node with
+// its own token, and can only do what the supervisor offers it (DeviceView).
+type Device struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Node      string `json:"node"`           // tailnet machine it's pinned to
+	Host      string `json:"host,omitempty"` // the supervisor host on that machine ("mac"), if any
+	CreatedAt int64  `json:"createdAt"`
+	LastSeen  int64  `json:"lastSeen,omitempty"`
+}
+
+// DeviceCaller is how the web UI vouches for a device request: the token the
+// device sent, and the tailnet machine it came from (WhoIs).
+type DeviceCaller struct {
+	Token string   `json:"token"`
+	Node  string   `json:"node"`
+	IPs   []string `json:"ips,omitempty"`
+	// BrowserDriven: the web UI's own check says an agent is driving this
+	// machine's browser.
+	BrowserDriven bool `json:"browserDriven,omitempty"`
+}
+
+// DeviceView is what a device shows: one control per action it may send.
+type DeviceView struct {
+	Device   Device                   `json:"device"`
+	Pending  int                      `json:"pending"`
+	Controls map[string]DeviceControl `json:"controls"`
+}
+
+// DeviceControl is one action's current state on a device.
+type DeviceControl struct {
+	Enabled bool   `json:"enabled"`
+	Badge   int    `json:"badge,omitempty"`  // e.g. how many approvals wait
+	Detail  string `json:"detail,omitempty"` // what a press would act on, or why it's off
+	Ref     int    `json:"ref,omitempty"`    // what a press acts on (sent back with the action)
 }

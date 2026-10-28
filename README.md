@@ -49,7 +49,8 @@ are marked where they appear.
   that one command, once; the next one asks again. A policy can let a few
   routine commands through and refuses dangerous ones outright. Questions
   reach the TUI, a mobile-first web UI (passkey-locked, push notifications
-  with Approve / Deny), and a nudge in the agent's own terminal pane. Every
+  with Approve / Deny), a Stream Deck (Approve and Deny keys, with a count
+  of what's waiting), and a nudge in the agent's own terminal pane. Every
   decision goes in an audit log.
 - **Until you grant a session more.** When one Claude session is working
   through something that needs many commands, give it a grant: a scope
@@ -125,6 +126,8 @@ runs, and [docs/decisions/](docs/decisions/) for why it's built this way.
 - `supervisor/`: the supervisor (Go): server, MCP server, TUI and web UI in
   one binary, plus `apply-hook` (the webhook receiver), `tailnet-proxy` and
   `demo-admin` (the screenshots' and promo's made-up data).
+- `streamdeck/`: a Stream Deck plugin with Approve and Deny keys for the
+  supervisor (see "Devices" in `docs/supervisor.md`).
 - `trust/`: public keys allowed to sign what gets applied.
 - `packages/`: packages not in nixpkgs.
 - `scripts/`:

@@ -182,9 +182,9 @@ function dur(ms) {
   return `${Math.floor(h / 24)}d`;
 }
 const urgency = (sec) => (sec < 20 ? "var(--red)" : sec < 60 ? "var(--orange)" : "var(--mint)");
-const kindLabel = (k, target, p) => (k === "copy" ? `COPY ${p?.copy?.pull ? "FROM" : "TO"} ${hostLabel(target).toUpperCase()}` : k === "browser" ? `BROWSER ON ${hostLabel(target).toUpperCase()}` : isHost(target) ? `ON ${hostLabel(target).toUpperCase()}` : k === "grant_request" ? "GRANT REQUEST" : "COMMAND");
+const kindLabel = (k, target, p) => (k === "copy" ? `COPY ${p?.copy?.pull ? "FROM" : "TO"} ${hostLabel(target).toUpperCase()}` : k === "browser" ? `BROWSER ON ${hostLabel(target).toUpperCase()}` : isHost(target) ? `ON ${hostLabel(target).toUpperCase()}` : k === "grant_request" ? "GRANT REQUEST" : k === "device_pair" ? "PAIR DEVICE" : "COMMAND");
 const sizeOf = (n) => { if (n < 1024) return `${n} B`; let v = n / 1024, i = 0; while (v >= 1024 && i < 5) { v /= 1024; i++; } return `${v.toFixed(1)} ${"KMGTPE"[i]}iB`; };
-const kindClass = (p) => (p.kind === "browser" || p.kind === "grant_request" ? "k-bypass" : isHost(p.target) ? "k-mac" : `k-${p.kind}`);
+const kindClass = (p) => (p.kind === "browser" || p.kind === "grant_request" || p.kind === "device_pair" ? "k-bypass" : isHost(p.target) ? "k-mac" : `k-${p.kind}`);
 const hostGrants = (h) => (S.data?.grants || []).filter((g) => g.target === h);
 const hostBypassIds = (h) => hostGrants(h).filter((g) => g.session === "*" && g.profile === "*" && g.credentials === "*").map((g) => g.id);
 const levelIcon = { full: "⚡", partial: "◐", none: "○", locked: "■" };

@@ -211,7 +211,18 @@ func (s *server) routes(auth bool) http.Handler {
 		h = s.requireUnlock(h)
 		h = s.whois(h)
 	}
-	return s.securityHeaders(h)
+	// Devices (devices.go) authenticate with their own token, not a passkey.
+	var dev http.Handler = guard(s.deviceRoutes())
+	if auth {
+		dev = s.deviceWhois(dev)
+	}
+	return s.securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/device/") {
+			dev.ServeHTTP(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
 }
 
 type ctxKey string

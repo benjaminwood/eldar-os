@@ -16,6 +16,8 @@
 //	                   Eldar passes Ben's answer to another Claude session
 //	supervisor git-credential, supervisor github-token [OWNER]
 //	                   GitHub for git and gh in the VM: an owner's ambient token, or Eldar's App
+//	supervisor devices [unpair ID]
+//	                   paired devices (a Stream Deck); they pair themselves, Ben approves
 //	supervisor env [DIR]
 //	                   the ambient environment variables for DIR, for direnv
 //	supervisor tools-relay --grants FILE --stubs DIR
@@ -108,6 +110,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "github-token" {
 		runGitHubToken(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "devices" {
+		runDevices(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "env" {

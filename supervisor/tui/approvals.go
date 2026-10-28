@@ -62,7 +62,7 @@ func kindColor(kind, target string) string {
 	if target != "" && target != "eldar" && target != "browser" { // a remote host
 		return t.Lavender
 	}
-	if kind == "grant_request" {
+	if kind == "grant_request" || kind == "device_pair" {
 		return t.Yellow
 	}
 	return t.Cyan

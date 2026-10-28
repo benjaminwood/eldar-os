@@ -77,6 +77,35 @@ window, a grant), herdr shows a notification with the "request" sound:
 `Approval #12 · <session title>` and what it's for. Answering still happens in
 the TUI or web UI; a failed nudge never affects the approval.
 
+## Devices (a Stream Deck)
+
+Physical controls on Ben's own machines can act through the supervisor: the
+first is a Stream Deck on his Mac with Approve and Deny keys
+(`streamdeck/`, a dependency-free plugin). A device is a thin client. It
+talks to the web UI's tailnet node (`/device/...`, `supervisor/web/devices.go`):
+the supervisor sends what each key shows (`server/devices.go`, `DeviceView`),
+and a press goes back as an action naming the request it showed, so a
+request that arrived since isn't answered by mistake.
+
+- **Pairing.** Pressing a key on an unpaired deck asks to pair. That's an
+  ordinary approval (`PAIR DEVICE`) in the TUI and web UI, which no device
+  can answer. Approving gives the device a token, kept in the plugin's
+  settings; the supervisor keeps only its hash (`devices.json` in its state
+  directory), pinned to the tailnet machine it was paired from.
+  `supervisor devices` lists them; `supervisor devices unpair ID` revokes one.
+- **What a device may do.** Deny any waiting request. Approve any except a
+  pairing, but only while no agent can act on the device's machine. Agents
+  run commands on the Mac (it's a supervisor host), so one could read the
+  token there. Approve is off ("Locked" on the key) while a grant or an
+  allow-list entry covers that host, or an agent has a browser window on that
+  machine. Deny stays on; an agent denying its own request gains nothing.
+- **Setup on the Mac.** Copy `streamdeck/com.eldar-os.supervisor.sdPlugin` to
+  `~/Library/Application Support/com.elgato.StreamDeck/Plugins/`, write
+  `~/Library/Application Support/eldar-os/streamdeck.json` as
+  `{"server": "https://<web UI hostname>.<tailnet>.ts.net"}`, restart the
+  Stream Deck app, drag Supervisor → Approve and Deny onto keys, and press
+  one to pair.
+
 ## Commands on other hosts
 
 Agents can run commands on other machines Ben has configured, through the

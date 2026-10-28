@@ -378,6 +378,9 @@ func KindLabelFor(kind, target, host string) string {
 	if host == "" {
 		host = target
 	}
+	if kind == "device_pair" {
+		return "PAIR DEVICE"
+	}
 	if kind == "browser" {
 		return "BROWSER ON " + strings.ToUpper(host)
 	}

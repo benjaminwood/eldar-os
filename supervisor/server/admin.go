@@ -44,6 +44,7 @@ func (s *Supervisor) Snapshot() api.State {
 		Hosts:         s.hostStatuses(),
 		BrowserGrants: s.browserGrants(),
 		Crons:         s.crons.List(),
+		Devices:       s.devices.List(),
 		Viewers:       s.n.Subscribers(),
 	}
 }
@@ -317,6 +318,53 @@ func (s *Supervisor) adminHandler() http.Handler {
 			sendJSON(w, 409, map[string]any{"error": "already answered or expired"})
 			return
 		}
+		sendJSON(w, 200, map[string]any{"ok": true})
+	})
+	// Devices (devices.go). The web UI calls these for a device, vouching for
+	// the tailnet machine it came from; the token decides which device it is.
+	mux.HandleFunc("POST /admin/devices/pair", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Name   string           `json:"name"`
+			Caller api.DeviceCaller `json:"caller"`
+		}
+		readJSON(r, &b)
+		dev, token, status, msg := s.PairDevice(b.Name, b.Caller)
+		if status != 200 {
+			sendJSON(w, status, map[string]any{"error": msg})
+			return
+		}
+		sendJSON(w, 200, map[string]any{"device": dev, "token": token})
+	})
+	mux.HandleFunc("POST /admin/devices/view", func(w http.ResponseWriter, r *http.Request) {
+		var c api.DeviceCaller
+		readJSON(r, &c)
+		v, ok := s.DeviceView(c)
+		if !ok {
+			sendJSON(w, 401, map[string]any{"error": "unknown device"})
+			return
+		}
+		sendJSON(w, 200, v)
+	})
+	mux.HandleFunc("POST /admin/devices/action", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Caller api.DeviceCaller `json:"caller"`
+			Action string           `json:"action"`
+			Ref    int              `json:"ref"`
+		}
+		readJSON(r, &b)
+		if status, msg := s.DeviceAction(b.Caller, b.Action, b.Ref); status != 200 {
+			sendJSON(w, status, map[string]any{"error": msg})
+			return
+		}
+		sendJSON(w, 200, map[string]any{"ok": true})
+	})
+	mux.HandleFunc("DELETE /admin/devices/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil || !s.devices.Remove(id) {
+			sendJSON(w, 404, map[string]any{"error": "no such device"})
+			return
+		}
+		s.adminLog(r, fmt.Sprintf("DEVICE #%d unpaired", id), "Unpaired by Ben")
 		sendJSON(w, 200, map[string]any{"ok": true})
 	})
 	mux.HandleFunc("POST /admin/mode", func(w http.ResponseWriter, r *http.Request) {

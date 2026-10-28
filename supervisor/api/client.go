@@ -449,3 +449,29 @@ func (c *Client) HostAllow(ctx context.Context, host, pattern string, remove boo
 	}
 	return c.do(ctx, method, "/admin/hosts/"+url.PathEscape(host)+"/allow", map[string]string{"pattern": pattern}, nil)
 }
+
+// PairDevice asks Ben to pair a device; it blocks until he answers.
+func (c *Client) PairDevice(ctx context.Context, name string, caller DeviceCaller) (Device, string, error) {
+	var out struct {
+		Device Device `json:"device"`
+		Token  string `json:"token"`
+	}
+	err := c.do(ctx, "POST", "/admin/devices/pair", map[string]any{"name": name, "caller": caller}, &out)
+	return out.Device, out.Token, err
+}
+
+// DeviceView is what a device should show now.
+func (c *Client) DeviceView(ctx context.Context, caller DeviceCaller) (DeviceView, error) {
+	var v DeviceView
+	err := c.do(ctx, "POST", "/admin/devices/view", caller, &v)
+	return v, err
+}
+
+// DeviceAction runs a press on a device; ref is what the device showed.
+func (c *Client) DeviceAction(ctx context.Context, caller DeviceCaller, action string, ref int) error {
+	return c.do(ctx, "POST", "/admin/devices/action", map[string]any{"caller": caller, "action": action, "ref": ref}, nil)
+}
+
+func (c *Client) RemoveDevice(ctx context.Context, id int) error {
+	return c.do(ctx, "DELETE", fmt.Sprintf("/admin/devices/%d", id), nil, nil)
+}

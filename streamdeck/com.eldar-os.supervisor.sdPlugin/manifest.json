@@ -1,0 +1,35 @@
+{
+  "UUID": "com.eldar-os.supervisor",
+  "Name": "Supervisor",
+  "Version": "0.1.0.0",
+  "Author": "eldar-os",
+  "Description": "Answer the supervisor's approvals from a Stream Deck.",
+  "Icon": "imgs/plugin",
+  "Category": "Supervisor",
+  "CategoryIcon": "imgs/category",
+  "CodePath": "bin/plugin.js",
+  "Nodejs": { "Version": "20" },
+  "SDKVersion": 2,
+  "Software": { "MinimumVersion": "6.5" },
+  "OS": [{ "Platform": "mac", "MinimumVersion": "12" }],
+  "Actions": [
+    {
+      "UUID": "com.eldar-os.supervisor.approve",
+      "Name": "Approve",
+      "Tooltip": "Approve the oldest waiting request",
+      "Icon": "imgs/actions/approve",
+      "Controllers": ["Keypad"],
+      "SupportedInMultiActions": false,
+      "States": [{ "Image": "imgs/keys/approve", "ShowTitle": false }]
+    },
+    {
+      "UUID": "com.eldar-os.supervisor.deny",
+      "Name": "Deny",
+      "Tooltip": "Deny the oldest waiting request",
+      "Icon": "imgs/actions/deny",
+      "Controllers": ["Keypad"],
+      "SupportedInMultiActions": false,
+      "States": [{ "Image": "imgs/keys/deny", "ShowTitle": false }]
+    }
+  ]
+}
