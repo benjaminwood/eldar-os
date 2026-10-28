@@ -55,8 +55,8 @@ in
         hosts.json: other machines agents may run commands on (name, label,
         description, SSH target, pinned host key, login shell). Private, so not
         in this repo. Each host's private key goes in the sops secret
-        `remote-hosts/<name>`, owned by the supervisor. Read at start: restart
-        the supervisor after changing it.
+        `remote-hosts/<name>`, owned by the supervisor. Read again whenever it
+        changes; a new host's key restarts the supervisor (restartUnits).
       '';
     };
     awsConfig = lib.mkOption {

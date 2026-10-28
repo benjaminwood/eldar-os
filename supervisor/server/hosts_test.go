@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -125,3 +126,29 @@ func TestHostGrants(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestHostsFileReloadsWhenItChanges(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "hosts.json")
+	os.WriteFile(p, []byte(`[{"name":"mini","target":"u@10.0.0.27","hostKey":"ssh-ed25519 OLD"}]`), 0o600)
+	f, err := NewHostsFile(p, dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := newTest(t)
+	s.cfg.HostsFile = f
+	if h := s.host("mini"); h == nil || h.Target != "u@10.0.0.27" {
+		t.Fatalf("start: %+v", h)
+	}
+	os.WriteFile(p, []byte(`[{"name":"mini","target":"u@10.0.0.118","hostKey":"ssh-ed25519 NEW"}]`), 0o600)
+	if h := s.host("mini"); h == nil || h.Target != "u@10.0.0.118" {
+		t.Fatalf("after the move: %+v", h)
+	}
+	if kh, _ := os.ReadFile(filepath.Join(dir, "known_hosts-mini")); string(kh) != "10.0.0.118 ssh-ed25519 NEW\n" {
+		t.Fatalf("known_hosts %q", kh)
+	}
+	os.WriteFile(p, []byte(`[{"name":"mini"`), 0o600) // broken: keep what was there
+	if h := s.host("mini"); h == nil || h.Target != "u@10.0.0.118" || !slices.Equal(s.hostNames(), []string{"mini"}) {
+		t.Fatalf("after a bad edit: %+v", h)
+	}
+}

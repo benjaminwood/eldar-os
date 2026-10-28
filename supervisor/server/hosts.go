@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -102,6 +103,43 @@ func LoadHosts(path, keyDir, stateDir string) (map[string]*RemoteHost, error) {
 		hosts[h.Name] = rh
 	}
 	return hosts, nil
+}
+
+// HostsFile is hosts.json, read again whenever it changes, so a change (say a
+// host moving to another machine) applies without restarting the supervisor.
+// A file that no longer loads leaves the hosts as they were.
+type HostsFile struct {
+	path, keyDir, stateDir string
+	mu                     sync.Mutex
+	raw                    []byte
+	hosts                  map[string]*RemoteHost
+}
+
+func NewHostsFile(path, keyDir, stateDir string) (*HostsFile, error) {
+	raw, _ := os.ReadFile(path)
+	hosts, err := LoadHosts(path, keyDir, stateDir)
+	if err != nil {
+		return nil, err
+	}
+	return &HostsFile{path: path, keyDir: keyDir, stateDir: stateDir, raw: raw, hosts: hosts}, nil
+}
+
+func (f *HostsFile) Hosts() map[string]*RemoteHost {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	raw, err := os.ReadFile(f.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) || bytes.Equal(raw, f.raw) {
+		return f.hosts
+	}
+	f.raw = raw
+	hosts, err := LoadHosts(f.path, f.keyDir, f.stateDir)
+	if err != nil {
+		logf("hosts: %v; keeping the hosts loaded before", err)
+		return f.hosts
+	}
+	f.hosts = hosts
+	logf("hosts: %s changed; reloaded", f.path)
+	return hosts
 }
 
 func (h *RemoteHost) Configured() bool {
@@ -301,14 +339,23 @@ func (a *HostAllow) Match(host, command string) string {
 	return ""
 }
 
-func (s *Supervisor) host(name string) *RemoteHost { return s.cfg.Hosts[name] }
+// hosts: from hosts.json as it is now, or the fixed set in Config.Hosts.
+func (s *Supervisor) hosts() map[string]*RemoteHost {
+	if s.cfg.HostsFile != nil {
+		return s.cfg.HostsFile.Hosts()
+	}
+	return s.cfg.Hosts
+}
 
-func (s *Supervisor) isHost(name string) bool { _, ok := s.cfg.Hosts[name]; return ok }
+func (s *Supervisor) host(name string) *RemoteHost { return s.hosts()[name] }
+
+func (s *Supervisor) isHost(name string) bool { _, ok := s.hosts()[name]; return ok }
 
 // hostNames: the configured hosts, sorted.
 func (s *Supervisor) hostNames() []string {
-	names := make([]string, 0, len(s.cfg.Hosts))
-	for n := range s.cfg.Hosts {
+	hosts := s.hosts()
+	names := make([]string, 0, len(hosts))
+	for n := range hosts {
 		names = append(names, n)
 	}
 	slices.Sort(names)

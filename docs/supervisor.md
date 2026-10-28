@@ -84,7 +84,9 @@ the host's name. Ben's Mac (`mac`) is the first. Each host is private config:
 `hosts.json` in the secrets repo (`hostsFile`) gives its name, label, a
 description for agents, SSH target, pinned host key and login shell; its
 private key is the sops secret `remote-hosts/<name>`, readable only by the
-supervisor. The supervisor reads `hosts.json` at start.
+supervisor. The supervisor reads `hosts.json` again whenever it changes, so
+an edit (a host moving to another machine, say) applies without a restart; a
+file that doesn't load leaves the hosts as they were, and says why in the log.
 
 Approval is per host: global bypass and grants for Eldar's VM never cover
 another host. Only that host's grants (target = its name) and its allow list

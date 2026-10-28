@@ -88,12 +88,12 @@ func runServe(args []string) {
 		KnownHosts:  env("SUPERVISOR_KNOWN_HOSTS", state+"/ssh/known_hosts"),
 		DefaultUser: env("SUPERVISOR_RUN_USER", "ben"),
 	}
-	hosts, err := server.LoadHosts(os.Getenv("SUPERVISOR_HOSTS"), env("SUPERVISOR_HOST_KEYS", "/run/secrets/remote-hosts"), state)
+	hosts, err := server.NewHostsFile(os.Getenv("SUPERVISOR_HOSTS"), env("SUPERVISOR_HOST_KEYS", "/run/secrets/remote-hosts"), state)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "supervisor: hosts:", err)
 		os.Exit(1)
 	}
-	cfg.Hosts = hosts
+	cfg.HostsFile = hosts
 	cfg.GitHub = &server.GitHubApp{
 		AppID:          os.Getenv("SUPERVISOR_GITHUB_APP_ID"),
 		InstallationID: os.Getenv("SUPERVISOR_GITHUB_INSTALLATION_ID"),

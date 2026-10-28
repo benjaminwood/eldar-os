@@ -49,6 +49,7 @@ type Config struct {
 	TerminalSSH               TerminalSSH            // live terminals into the VM
 	GitHub                    *GitHubApp             // Eldar's GitHub App; nil = none
 	Hosts                     map[string]*RemoteHost // remote hosts by name (hosts.go); "mac" is Ben's Mac
+	HostsFile                 *HostsFile             // if set, the hosts come from here instead, re-read on change
 	HostAllowPath             string
 	AwsConfigPath             string // ~/.aws/config-style profiles; "" = no AWS
 	AwsStateDir               string
