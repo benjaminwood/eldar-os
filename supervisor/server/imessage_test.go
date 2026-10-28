@@ -171,6 +171,30 @@ func TestIMessagePollDeliversOnlyAllowedChats(t *testing.T) {
 	}
 }
 
+func TestIMessageStartsOverWhenTheDatabaseIsReplaced(t *testing.T) {
+	bb := &fakeBlueBubbles{msgs: []map[string]any{bbMsg(500, "+15555550100", "on the old Mac")}}
+	s := newIMessageTest(t, bb)
+	ctx := context.Background()
+	if err := s.pollIMessage(ctx); err != nil || s.imessage.state.LastRowID != 500 {
+		t.Fatalf("baseline: %v, last %d", err, s.imessage.state.LastRowID)
+	}
+	bb.mu.Lock() // BlueBubbles moves to another Mac, whose history numbers from 1
+	bb.msgs = []map[string]any{bbMsg(3, "+15555550100", "synced from iCloud")}
+	bb.mu.Unlock()
+	if err := s.pollIMessage(ctx); err != nil || s.imessage.state.LastRowID != 3 || len(s.imessage.events) != 0 {
+		t.Fatalf("replaced: %v, last %d, %d events", err, s.imessage.state.LastRowID, len(s.imessage.events))
+	}
+	bb.mu.Lock()
+	bb.msgs = append(bb.msgs, bbMsg(4, "+15555550100", "hello from the new Mac"))
+	bb.mu.Unlock()
+	if err := s.pollIMessage(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if ev := s.imessage.events; len(ev) != 1 || ev[0].Text != "hello from the new Mac" {
+		t.Fatalf("events %+v", ev)
+	}
+}
+
 func TestIMessageSendOnlyToAllowedFromTheSession(t *testing.T) {
 	bb := &fakeBlueBubbles{chats: map[string]map[string]any{
 		"iMessage;+;fam":   bbChat("iMessage;+;fam", "", "+15555550100", "+15555550111"),

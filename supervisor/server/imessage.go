@@ -447,6 +447,29 @@ func (b bbMessage) isAssociated() bool {
 
 const bbGroupStyle = 43
 
+// newestRowID is the ROWID of the newest message in the Messages database, or
+// 0 when it has none.
+func (m *IMessage) newestRowID(ctx context.Context, f imessageFile) (int64, error) {
+	data, err := m.call(ctx, f, http.MethodPost, "message/query", nil, map[string]any{"limit": 1, "sort": "DESC"})
+	if err != nil {
+		return 0, err
+	}
+	var msgs []bbMessage
+	json.Unmarshal(data, &msgs)
+	if len(msgs) == 0 {
+		return 0, nil
+	}
+	return msgs[0].ROWID, nil
+}
+
+// baseline records where history ends, so only messages after it are delivered.
+func (m *IMessage) baseline(newest int64) {
+	m.mu.Lock()
+	m.state.LastRowID = max(newest, 1) // an empty history starts from the first message
+	m.saveState()
+	m.mu.Unlock()
+}
+
 // poll fetches messages newer than the last one seen, and adds the ones from
 // allowed contacts. The first poll only records where history ends.
 func (s *Supervisor) pollIMessage(ctx context.Context) error {
@@ -459,20 +482,12 @@ func (s *Supervisor) pollIMessage(ctx context.Context) error {
 	last := m.state.LastRowID
 	m.mu.Unlock()
 	if last == 0 {
-		data, err := m.call(ctx, f, http.MethodPost, "message/query", nil, map[string]any{"limit": 1, "sort": "DESC"})
+		newest, err := m.newestRowID(ctx, f)
 		if err != nil {
 			return err
 		}
-		var msgs []bbMessage
-		json.Unmarshal(data, &msgs)
-		m.mu.Lock()
-		m.state.LastRowID = 1 // an empty history starts from the first message
-		if len(msgs) > 0 {
-			m.state.LastRowID = msgs[0].ROWID
-		}
-		m.saveState()
-		m.mu.Unlock()
-		logf("imessage: connected; new messages after #%d", m.state.LastRowID)
+		m.baseline(newest)
+		logf("imessage: connected; new messages after #%d", max(newest, 1))
 		return nil
 	}
 	data, err := m.call(ctx, f, http.MethodPost, "message/query", nil, map[string]any{
@@ -485,6 +500,20 @@ func (s *Supervisor) pollIMessage(ctx context.Context) error {
 	var msgs []bbMessage
 	if err := json.Unmarshal(data, &msgs); err != nil {
 		return fmt.Errorf("BlueBubbles messages: %v", err)
+	}
+	if len(msgs) == 0 {
+		// Nothing new, or the Messages database was replaced (BlueBubbles moved
+		// to another Mac or account) and numbers its messages from lower down:
+		// then nothing would ever be newer, so start again from its newest.
+		newest, err := m.newestRowID(ctx, f)
+		if err != nil {
+			return err
+		}
+		if newest < last {
+			m.baseline(newest)
+			logf("imessage: the Messages database was replaced (newest #%d, was after #%d); new messages after #%d", newest, last, max(newest, 1))
+		}
+		return nil
 	}
 	done := func(upTo int64) { // record progress, so nothing is delivered twice
 		m.mu.Lock()
