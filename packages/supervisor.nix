@@ -9,12 +9,9 @@
   subPackages = [ "cmd/supervisor" "cmd/apply-hook" "cmd/tailnet-proxy" ];
   env.CGO_ENABLED = 0;
   ldflags = [ "-s" "-w" ];
-  # Run every package's tests (the server's parity tests), not just the
-  # built command's.
-  checkPhase = ''
-    runHook preCheck
-    go test ./...
-    runHook postCheck
-  '';
+  # No tests in the build: they add about a minute to every rebuild of the
+  # machine. CI runs them all (`scripts/go test ./...`); locally, run the ones
+  # for what changed.
+  doCheck = false;
   meta.mainProgram = "supervisor";
 }

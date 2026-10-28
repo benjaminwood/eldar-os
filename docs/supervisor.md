@@ -34,8 +34,9 @@ they share). Nix: `modules/supervisor.nix`, configured in
 | Ambient credentials | `/var/lib/eldar-os/secrets/supervisor/ambient.yaml` (private repo), re-read per request |
 | Credentials config | sops secret `supervisor-env`: `OP_ACCOUNT_*_TOKEN`, `OP_PROFILE_*_ACCOUNT`, `OP_PROFILE_*_ENV` |
 
-Develop: `scripts/go test ./...`, then `scripts/try` (the Nix build runs the
-tests too). After a UI change, `scripts/screenshots` refreshes the README's
+Develop: `scripts/go test ./server/ -run <Name>` for what changed, then
+`scripts/try`. The Nix build skips the tests to keep rebuilds quick; CI runs
+them all (`scripts/go test ./...`). After a UI change, `scripts/screenshots` refreshes the README's
 screenshots from made-up data (`docs/screenshots.md`).
 
 ## Agents' client: the MCP server

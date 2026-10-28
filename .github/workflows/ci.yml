@@ -42,6 +42,9 @@ jobs:
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
       - name: flake check
         run: nix flake check --no-build
+      - name: supervisor tests
+        # The Nix package skips them, to keep rebuilds quick.
+        run: scripts/go test ./...
       - name: build system
         run: nix build --print-build-logs .#nixosConfigurations.eldar-os.config.system.build.toplevel
 
