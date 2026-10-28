@@ -70,8 +70,16 @@
         # Its session's ID goes to herdr (how the supervisor knows this is
         # Quickbeam's tab) through the tools relay: herdr's socket controls
         # every pane, so the quickbeam user doesn't get to reach it.
+        # And it starts knowing what Eldar lends it right now (a SessionStart
+        # hook's output joins its context).
         hooks.SessionStart = [{ matcher = "^(startup|resume|clear|compact|fork)$";
-          hooks = [{ type = "command"; command = "/run/current-system/sw/bin/supervisor tool --herdr-session"; timeout = 10; }]; }];
+          hooks = [
+            { type = "command"; command = "/run/current-system/sw/bin/supervisor tool --herdr-session"; timeout = 10; }
+            { type = "command"; timeout = 10; command = "${pkgs.writeShellScript "quickbeam-lent-tools" ''
+              echo "Commands Eldar lends you right now (on your PATH; \`supervisor tool --list\` shows the current list):"
+              /run/current-system/sw/bin/supervisor tool --list
+            ''}"; }
+          ]; }];
       });
       # Starts its Claude as the quickbeam user (Eldar's watchdog runs it
       # through sudo, in Quickbeam's herdr tab): its flags, its environment,
