@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -23,6 +24,8 @@ They read iMessage, not this terminal: anything you want them to see must go thr
 Write like a person texting: plain text (iMessage shows Markdown symbols literally), short, one message per answer rather than a stream of fragments. Don't send a half-finished thought; when a task takes a while, say so in one line first only if it really will take long.
 
 attachments="N" means the message had N attachments (photos, files) you can't see; say so if it matters.
+
+To react the way a person taps a heart or a thumbs up, use the react tool with the message's message_id; a reaction can stand in for a reply when that's all the message needs.
 
 Use the history tool when you need earlier conversation you no longer have (after a restart, or a message that refers back), and contacts to see whom you can write to.`
 
@@ -103,7 +106,29 @@ func (ch *channel) imessageServer(version string) *server {
 			}
 			return textResult(strings.Join(lines, "\n"))
 		}}
-	tools := []tool{reply, history, contacts}
+	react := tool{Name: "react",
+		Description: "React to a message with an iMessage tapback (heart, thumbs up, ...), in its chat. Use it where a person would tap a reaction rather than type a reply.",
+		Schema: func([]string, string) map[string]any {
+			return object(map[string]any{
+				"message_id": map[string]any{"type": "string", "description": "The message_id attribute of the message you're reacting to."},
+				"reaction": map[string]any{"type": "string", "enum": []string{"love", "like", "dislike", "laugh", "emphasize", "question"},
+					"description": "love (heart), like (thumbs up), dislike (thumbs down), laugh (haha), emphasize (!!), question (?)."},
+				"remove": map[string]any{"type": "boolean", "description": "Take back a reaction you gave earlier."},
+			}, "message_id", "reaction")
+		},
+		run: func(ctx context.Context, args map[string]any) map[string]any {
+			id, err := strconv.Atoi(strings.TrimSpace(str(args, "message_id")))
+			if err != nil {
+				return errorText("message_id must be a message's message_id attribute")
+			}
+			remove, _ := args["remove"].(bool)
+			out, err := ch.call(ctx, http.MethodPost, "/imessage/react", map[string]any{"messageId": id, "reaction": str(args, "reaction"), "remove": remove})
+			if err != nil {
+				return errorText(err.Error())
+			}
+			return textResult(fmt.Sprintf("Reacted %v to %v's message.", out["reacted"], out["to"]))
+		}}
+	tools := []tool{reply, react, history, contacts}
 	s := &server{c: ch.c, name: "imessage", version: version, instructions: imessageInstructions, channel: true, tools: map[string]tool{}}
 	for _, t := range tools {
 		s.tools[t.Name] = t

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -62,6 +63,9 @@ func (f *fakeBlueBubbles) handler(t *testing.T) http.Handler {
 			json.NewEncoder(w).Encode(map[string]any{"status": 500, "message": "Please make sure you have completed the setup for the Private API, and your helper is connected!",
 				"error": map[string]any{"type": "iMessage Error", "message": "iMessage Private API Helper is not connected!"}})
 			return
+		case r.URL.Path == "/api/v1/message/react":
+			f.sent = append(f.sent, body)
+			data = map[string]any{"guid": "reaction"}
 		case r.URL.Path == "/api/v1/message/text":
 			f.sent = append(f.sent, body)
 			data = map[string]any{"guid": "sent"}
@@ -303,5 +307,52 @@ func TestIMessageWebhookOnlyNudgesAPoll(t *testing.T) {
 	defer s.imessage.mu.Unlock()
 	if len(s.imessage.events) != 1 || s.imessage.events[0].Text != "hello" {
 		t.Fatalf("events %+v", s.imessage.events)
+	}
+}
+
+func TestIMessageReactToADeliveredMessage(t *testing.T) {
+	bb := &fakeBlueBubbles{msgs: []map[string]any{bbMsg(1, "+15555550100", "old")}, chats: map[string]map[string]any{
+		"iMessage;-;+15555550100": {"guid": "iMessage;-;+15555550100", "style": 45, "participants": []map[string]any{{"address": "+15555550100"}}},
+	}}
+	s := newIMessageTest(t, bb)
+	ctx := context.Background()
+	s.pollIMessage(ctx)
+	bb.mu.Lock()
+	bb.msgs = append(bb.msgs, bbMsg(2, "+15555550100", "dinner at 6?"))
+	bb.mu.Unlock()
+	if err := s.pollIMessage(ctx); err != nil || len(s.imessage.events) != 1 {
+		t.Fatalf("poll: %v, %d events", err, len(s.imessage.events))
+	}
+	id := s.imessage.events[0].ID
+	h := s.agentHandler()
+	react := func(session string, body string) int {
+		req := httptest.NewRequest("POST", "/imessage/react", strings.NewReader(body))
+		req.Header.Set("X-Session-Id", session)
+		req.Header.Set("X-Chat-Key", "k")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if c := react("s1", fmt.Sprintf(`{"messageId":%d,"reaction":"love"}`, id)); c != 200 {
+		t.Fatalf("react: %d", c)
+	}
+	if len(bb.sent) != 1 || bb.sent[0]["reaction"] != "love" || bb.sent[0]["chatGuid"] != "iMessage;-;+15555550100" ||
+		bb.sent[0]["selectedMessageGuid"] != "g+15555550100dinner at 6?" {
+		t.Fatalf("sent %+v", bb.sent)
+	}
+	if c := react("s1", fmt.Sprintf(`{"messageId":%d,"reaction":"love","remove":true}`, id)); c != 200 || bb.sent[1]["reaction"] != "-love" {
+		t.Fatalf("remove: %d %+v", c, bb.sent)
+	}
+	if c := react("s1", fmt.Sprintf(`{"messageId":%d,"reaction":"fire"}`, id)); c != 400 {
+		t.Fatalf("unknown reaction: %d", c)
+	}
+	if c := react("s1", `{"messageId":999,"reaction":"like"}`); c != 404 {
+		t.Fatalf("unknown message: %d", c)
+	}
+	if c := react("other", fmt.Sprintf(`{"messageId":%d,"reaction":"like"}`, id)); c != 403 {
+		t.Fatalf("another session: %d", c)
+	}
+	if len(bb.sent) != 2 {
+		t.Fatalf("refused reactions reached BlueBubbles: %+v", bb.sent)
 	}
 }

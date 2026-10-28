@@ -42,7 +42,7 @@
         mcpServers.imessage = { command = "/run/current-system/sw/bin/supervisor"; args = [ "channel" "imessage" ]; };
       });
       settings = pkgs.writeText "quickbeam-settings.json" (builtins.toJSON {
-        permissions.allow = [ "mcp__imessage__reply" "mcp__imessage__history" "mcp__imessage__contacts"
+        permissions.allow = [ "mcp__imessage__reply" "mcp__imessage__react" "mcp__imessage__history" "mcp__imessage__contacts"
           "Read" "Edit" "Write" "Glob" "Grep" "WebSearch" "WebFetch" ];
         # herdr's hook (installed for Eldar): reports the session's ID to
         # herdr, which is how the supervisor knows this is Quickbeam's tab.

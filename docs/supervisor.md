@@ -200,7 +200,8 @@ server's password is a sops secret only the supervisor reads.
   `http://<this machine>:<port>/bluebubbles/webhook`) makes it poll at once,
   and the regular poll slows to every 30 s; without, it polls every 3 s. The
   webhook's body is ignored, and the firewall admits only the Mac.
-- Out: the channel's `reply`, `history` and `contacts` tools, in allowed
+- Out: the channel's `reply`, `react` (tapbacks, Private API only), `history`
+  and `contacts` tools, in allowed
   chats only. Each message in or out is audited. Replies go through
   BlueBubbles' Private API when it's set up (its helper in Messages: quicker,
   and no macOS permission prompts), and through AppleScript when BlueBubbles

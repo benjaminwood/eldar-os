@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,8 +30,8 @@ import (
 //     chats until the agent's `imessage` channel takes them from
 //     GET /imessage/stream. Messages from anywhere else are dropped, and only
 //     their sender is audited.
-//   - Out: POST /imessage/send and GET /imessage/history, in allowed chats
-//     only. The supervisor adds BlueBubbles' password; the agent never sees
+//   - Out: POST /imessage/send, POST /imessage/react and GET
+//     /imessage/history, in allowed chats only. The supervisor adds BlueBubbles' password; the agent never sees
 //     it.
 //
 // Only the Claude session in the configured herdr workspace and tab may use
@@ -433,6 +434,9 @@ func (m *IMessage) sendText(ctx context.Context, f imessageFile, chat, text stri
 	return err
 }
 
+// imessageReactions: iMessage's tapbacks, as BlueBubbles names them.
+var imessageReactions = []string{"love", "like", "dislike", "laugh", "emphasize", "question"}
+
 // bbMessage is the part of a BlueBubbles message we use.
 type bbMessage struct {
 	ROWID                 int64  `json:"originalROWID"`
@@ -777,6 +781,65 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			return
 		}
 		sendJSON(w, 200, map[string]any{"sent": true, "to": label, "name": label})
+	})
+	// A tapback on a message the session was given (its message_id), in that
+	// message's chat, which must still be allowed. Needs BlueBubbles' Private API.
+	mux.HandleFunc("POST /imessage/react", func(w http.ResponseWriter, r *http.Request) {
+		f, session, status, msg := s.imessageAuth(r, false)
+		if status != 0 {
+			sendJSON(w, status, map[string]any{"error": msg})
+			return
+		}
+		var b struct {
+			MessageID int    `json:"messageId"`
+			Reaction  string `json:"reaction"`
+			Remove    bool   `json:"remove"`
+		}
+		readJSON(r, &b)
+		if !slices.Contains(imessageReactions, b.Reaction) {
+			sendJSON(w, 400, map[string]any{"error": "reaction must be one of " + strings.Join(imessageReactions, ", ")})
+			return
+		}
+		var e *IMessageEvent
+		m.mu.Lock()
+		for i := range m.events {
+			if m.events[i].ID == b.MessageID {
+				e = &m.events[i]
+			}
+		}
+		var target IMessageEvent
+		if e != nil {
+			target = *e
+		}
+		m.mu.Unlock()
+		if e == nil {
+			sendJSON(w, 404, map[string]any{"error": "no recent message with that message_id"})
+			return
+		}
+		chat, label, _, err := m.resolveChat(r.Context(), f, target.Chat)
+		if err != nil {
+			s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage reaction in " + truncRunes(target.Chat, 80),
+				Decision: "deny", DecisionReason: err.Error(), SessionID: session, Mode: "normal"})
+			sendJSON(w, 403, map[string]any{"error": err.Error()})
+			return
+		}
+		reaction := b.Reaction
+		if b.Remove {
+			reaction = "-" + reaction
+		}
+		_, err = m.call(r.Context(), f, http.MethodPost, "message/react", nil,
+			map[string]any{"chatGuid": chat, "selectedMessageGuid": target.GUID, "reaction": reaction, "partIndex": 0})
+		decision, reason := "allow", "allowed chat"
+		if err != nil {
+			decision, reason = "error", err.Error()
+		}
+		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: fmt.Sprintf("imessage reaction %s to %s's message in %s: %s", reaction, target.Name, label, truncRunes(target.Text, 80)),
+			Decision: decision, DecisionReason: reason, SessionID: session, Mode: "normal"})
+		if err != nil {
+			sendJSON(w, 502, map[string]any{"error": err.Error()})
+			return
+		}
+		sendJSON(w, 200, map[string]any{"reacted": reaction, "to": target.Name, "chat": label})
 	})
 	// Recent messages in one allowed chat (`with`: an address, or a chat GUID),
 	// newest last.
