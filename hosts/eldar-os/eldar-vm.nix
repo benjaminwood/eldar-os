@@ -45,7 +45,9 @@
       });
       settings = pkgs.writeText "quickbeam-settings.json" (builtins.toJSON {
         permissions.allow = [ "mcp__imessage__reply" "mcp__imessage__react" "mcp__imessage__typing" "mcp__imessage__history" "mcp__imessage__contacts"
-          "Read" "Edit" "Write" "Glob" "Grep" "WebSearch" "WebFetch" "Bash" ];
+          "Read" "Edit" "Write" "Glob" "Grep" "WebSearch" "WebFetch" "Bash"
+          # Reminders and recurring jobs (they last as long as its session) and a to-do list.
+          "CronCreate" "CronList" "CronDelete" "TodoWrite" ];
         # Its shell: every command in bubblewrap, never outside it. It sees
         # none of Eldar's home, the shared /tmp (Eldar's temporary files and
         # browser sockets; it has its own tmp/), /run/user (herdr's and
@@ -101,7 +103,7 @@
         done
         if [ -n "$id" ]; then set -- --resume "$id"; else set -- -n Quickbeam; fi
         exec claude --restricted --permission-mode dontAsk \
-          --tools Read,Edit,Write,Glob,Grep,WebSearch,WebFetch,Bash \
+          --tools Read,Edit,Write,Glob,Grep,WebSearch,WebFetch,Bash,CronCreate,CronList,CronDelete,TodoWrite \
           --add-dir ${state}/work \
           --append-system-prompt ${lib.escapeShellArg prompt} \
           --settings ${settings} \
