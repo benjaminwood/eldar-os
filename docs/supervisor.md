@@ -220,10 +220,13 @@ this channel as its only MCP server.
 
 ## Lending Eldar's commands to a sandboxed agent
 
-Quickbeam has a shell, but a sandboxed one (Claude Code's Bash sandbox,
-bubblewrap): no network, writes only to its repo, `work/` and `tmp/`, and
-none of Eldar's home, the shared `/tmp`, `/run/user` or the system's
-sockets. What it may do beyond computing is whatever Eldar lends it
+Quickbeam runs as its own Unix user, `quickbeam` (Eldar's watchdog starts
+it in its herdr tab through one sudo rule), and has a shell, but a sandboxed
+one (Claude Code's Bash sandbox, bubblewrap): no network, writes only to its
+repo, `work/` and `tmp/`, and none of Eldar's home, the shared `/tmp`,
+`/run/user` or the system's sockets. It can't reach herdr's socket either
+(that controls every pane), so the tools relay passes its session report to
+herdr, for its own tab only. What it may do beyond computing is whatever Eldar lends it
 (`supervisor/tools`):
 
 - Eldar lists commands in `~/workspace/quickbeam/tools.yaml` (name, the

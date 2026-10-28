@@ -67,11 +67,39 @@
         # Programs: the system's, its toolbox (a Nix profile Eldar adds to)
         # and the commands Eldar lends it (stubs from the tools relay).
         env.PATH = "${state}/bin:${state}/toolbox/profile/bin:/run/wrappers/bin:/run/current-system/sw/bin";
-        # herdr's hook (installed for Eldar): reports the session's ID to
-        # herdr, which is how the supervisor knows this is Quickbeam's tab.
+        # Its session's ID goes to herdr (how the supervisor knows this is
+        # Quickbeam's tab) through the tools relay: herdr's socket controls
+        # every pane, so the quickbeam user doesn't get to reach it.
         hooks.SessionStart = [{ matcher = "^(startup|resume|clear|compact|fork)$";
-          hooks = [{ type = "command"; command = "bash /home/eldar/.claude/hooks/herdr-agent-state.sh session"; timeout = 10; }]; }];
+          hooks = [{ type = "command"; command = "/run/current-system/sw/bin/supervisor tool --herdr-session"; timeout = 10; }]; }];
       });
+      # Starts its Claude as the quickbeam user (Eldar's watchdog runs it
+      # through sudo, in Quickbeam's herdr tab): its flags, its environment,
+      # and the newest session named Quickbeam resumed (or one started).
+      claude = pkgs.writeShellScript "quickbeam-claude" ''
+        set -eu
+        export HOME=${state} CLAUDE_CONFIG_DIR=${config} TMPDIR=${state}/tmp
+        export PATH=${state}/.local/bin:/run/wrappers/bin:/run/current-system/sw/bin
+        export LANG=C.UTF-8 COLORTERM=truecolor
+        install -d -m 700 ${config} ${state}/tmp
+        # Its repo (identity and memory), private: cloning it needs access.
+        [ -d ${repo}/.git ] || git clone -q https://github.com/example/quickbeam ${repo} || install -d ${repo}
+        cd ${repo}
+        f=${config}/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
+        jq '.projects["${repo}"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+        id=
+        for t in $(grep -l '"customTitle":"Quickbeam"' ${config}/projects/${builtins.replaceStrings [ "/" ] [ "-" ] repo}/*.jsonl 2>/dev/null | xargs -r ls -t); do
+          if [ "$(grep -o '"customTitle":"[^"]*"' "$t" | tail -1)" = '"customTitle":"Quickbeam"' ]; then id=$(basename "$t" .jsonl); break; fi
+        done
+        if [ -n "$id" ]; then set -- --resume "$id"; else set -- -n Quickbeam; fi
+        exec claude --restricted --permission-mode dontAsk \
+          --tools Read,Edit,Write,Glob,Grep,WebSearch,WebFetch,Bash \
+          --add-dir ${state}/work \
+          --append-system-prompt ${lib.escapeShellArg prompt} \
+          --settings ${settings} \
+          --strict-mcp-config --mcp-config ${mcp} \
+          --dangerously-load-development-channels server:imessage "$@"
+      '';
     };
     # Claude sessions kept running in herdr, each in its own tab of workspace
     # "primary", with its own flags. Every 30 s: make sure the workspace and
@@ -145,6 +173,26 @@
               misses=0; continue
             fi
             misses=$((misses + 1)); ((misses < 2)) && continue
+            ${lib.optionalString (k ? launcher) ''
+            # Claude runs as another user, through its launcher (which picks the
+            # session to resume, from transcripts only that user can read).
+            log "Claude isn't running in $pane_id; starting it (${k.launcher})"
+            h pane run "$pane_id" ${lib.escapeShellArg k.launcher} >/dev/null
+            # herdr learns of the session from its SessionStart hook, which
+            # only runs once the development-channels warning is confirmed:
+            # confirm it first (Enter at an idle prompt does nothing).
+            sleep 5; for _ in 1 2 3 4 5; do sleep 3; h pane send-keys "$pane_id" enter >/dev/null; done
+            for _ in $(seq 20); do
+              [[ $(h pane list --workspace "$ws" | jq -r --arg p "$pane_id" '.result.panes[] | select(.pane_id == $p) | .agent // empty') == claude ]] && break
+              sleep 3
+            done
+            if [[ $(h pane list --workspace "$ws" | jq -r --arg p "$pane_id" '.result.panes[] | select(.pane_id == $p) | .agent // empty') == claude ]]; then
+              misses=0
+            else
+              log "Claude didn't come up in $pane_id"
+            fi
+            continue
+            ''}
             id=$(named_session)
             if [[ -n $id ]]; then
               log "Claude isn't running in $pane_id; resuming $NAME ($id)"; args=("''${CLAUDE_ARGS[@]}" --resume "$id")
@@ -275,42 +323,14 @@
       tab = "Quickbeam";
       cwd = quickbeam.repo;
       configDir = quickbeam.config;
-      args = [ "--restricted" "--permission-mode" "dontAsk"
-        "--tools" "Read,Edit,Write,Glob,Grep,WebSearch,WebFetch,Bash"
-        "--add-dir" "${quickbeam.state}/work"
-        "--append-system-prompt" quickbeam.prompt
-        "--settings" "${quickbeam.settings}"
-        "--strict-mcp-config" "--mcp-config" "${quickbeam.mcp}"
-        "--dangerously-load-development-channels" "server:imessage" ];
-      marker = "--restricted";
-      env.CLAUDE_CONFIG_DIR = quickbeam.config;
-      env.TMPDIR = "${quickbeam.state}/tmp"; # its own: the shared /tmp is hidden from its shell
-      prepare = ''
-        set -e
-        install -d -m 700 ${quickbeam.config}
-        f=${quickbeam.config}/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
-        jq '.projects["${quickbeam.repo}"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-        # Its repo (identity and memory), private: git reaches it through
-        # Eldar's GitHub App, which must be installed on it.
-        [ -d ${quickbeam.repo}/.git ] || git clone -q https://github.com/example/quickbeam ${quickbeam.repo} || true
-      '';
+      args = [ ];
+      launcher = "sudo -u quickbeam ${quickbeam.claude}";
+      marker = "quickbeam-claude";
+      env = { };
+      prepare = "true";
     };
-    # Quickbeam writes its memory into its repo: commit and push it.
-    systemd.user.services.quickbeam-sync = {
-      description = "Commit and push Quickbeam's memory";
-      unitConfig.ConditionUser = "eldar";
-      path = [ pkgs.git pkgs.coreutils ];
-      serviceConfig.Type = "oneshot";
-      script = ''
-        cd ${quickbeam.repo} 2>/dev/null || exit 0
-        git add -A
-        git diff --cached --quiet || git -c user.name=Quickbeam -c user.email=quickbeam@localhost commit -q -m "Quickbeam's notes"
-        git pull -q --rebase && git push -q
-      '';
-    };
-    systemd.user.timers.quickbeam-sync = {
+    systemd.timers.quickbeam-sync = {
       wantedBy = [ "timers.target" ];
-      unitConfig.ConditionUser = "eldar";
       timerConfig = { OnBootSec = "5min"; OnUnitActiveSec = "15min"; };
     };
     # Quickbeam's shell runs in Claude Code's sandbox (bubblewrap and socat, below).
@@ -323,17 +343,30 @@
       wantedBy = [ "default.target" ];
       unitConfig.ConditionUser = "eldar";
       # The lent commands run with Eldar's environment (rootless Docker, nix).
-      path = [ "/run/current-system/sw" "/etc/profiles/per-user/eldar" ];
+      path = [ herdr "/run/current-system/sw" "/etc/profiles/per-user/eldar" ];
       environment.DOCKER_HOST = "unix://%t/docker.sock";
       serviceConfig = {
-        ExecStart = "/run/current-system/sw/bin/supervisor tools-relay --grants /home/eldar/workspace/quickbeam/tools.yaml --stubs ${quickbeam.state}/bin --socket ${quickbeam.state}/run/tools.sock";
+        ExecStart = "/run/current-system/sw/bin/supervisor tools-relay --grants /home/eldar/workspace/quickbeam/tools.yaml --stubs ${quickbeam.state}/bin --socket ${quickbeam.state}/run/tools.sock --herdr-tab primary/Quickbeam --herdr-hook /home/eldar/.claude/hooks/herdr-agent-state.sh";
         Restart = "always";
         RestartSec = 5;
       };
     };
-    systemd.tmpfiles.rules = [ "d /var/lib/quickbeam 0700 eldar eldar-ws -" ]
-      ++ map (d: "d ${quickbeam.state}/${d} 0755 eldar eldar-ws -") [ "bin" "run" "work" "toolbox" ]
-      ++ [ "d ${quickbeam.state}/tmp 0700 eldar eldar-ws 1d" ];
+    # Quickbeam is its own user: the kernel keeps it from Eldar's files, not
+    # only the sandbox. Eldar starts it through this one sudo rule, and owns
+    # what it lends: the stubs, the relay's socket and the toolbox, in
+    # directories whose group (setgid) lets quickbeam read them.
+    users.users.quickbeam = { isSystemUser = true; uid = 1501; group = "quickbeam"; home = quickbeam.state; shell = pkgs.bash; };
+    users.groups.quickbeam.gid = 1501;
+    security.sudo.extraRules = [{ users = [ "eldar" ]; runAs = "quickbeam";
+      commands = [{ command = "${quickbeam.claude}"; options = [ "NOPASSWD" ]; }]; }];
+    # Run it on the tab's own terminal, not one of sudo's: herdr only sees an
+    # agent that's the pane's foreground process.
+    security.sudo.extraConfig = "Defaults!${quickbeam.claude} !use_pty";
+    systemd.tmpfiles.rules = [ "d ${quickbeam.state} 0711 quickbeam quickbeam -" ]
+      ++ map (d: "d ${quickbeam.state}/${d} 0700 quickbeam quickbeam -") [ "claude" "work" ]
+      ++ map (d: "Z ${quickbeam.state}/${d} - quickbeam quickbeam -") [ "repo" "claude" "work" ]
+      ++ [ "d ${quickbeam.state}/tmp 0700 quickbeam quickbeam 1d" ]
+      ++ map (d: "d ${quickbeam.state}/${d} 2750 eldar quickbeam -") [ "bin" "run" "toolbox" ];
 
     # Ben works in here as eldar, so his dotfiles apply to both users.
     eldar-os.chezmoi.users = {
@@ -386,22 +419,36 @@
     # Claude Code: the native build, installed once per user and then updating
     # itself, as on every other machine. A deliberate exception to pinning:
     # it ships near-daily and nixpkgs trails far behind.
-    systemd.services = builtins.listToAttrs (map (user: {
+    systemd.services = let home = user: if user == "quickbeam" then quickbeam.state else "/home/${user}"; in {
+      # Quickbeam writes its memory into its repo: commit and push it.
+      quickbeam-sync = {
+        description = "Commit and push Quickbeam's memory";
+        path = [ pkgs.git pkgs.coreutils ];
+        serviceConfig = { Type = "oneshot"; User = "quickbeam"; };
+        script = ''
+          cd ${quickbeam.repo} 2>/dev/null || exit 0
+          git add -A
+          git diff --cached --quiet || git -c user.name=Quickbeam -c user.email=quickbeam@localhost commit -q -m "Quickbeam's notes"
+          # Pushing needs GitHub access to the repo; until then the notes stay local.
+          git pull -q --rebase && git push -q || echo "not pushed (no access to the repo from here)"
+        '';
+      };
+    } // builtins.listToAttrs (map (user: {
       name = "claude-install-${user}";
       value = {
         description = "Install Claude Code for ${user}";
         wantedBy = [ "multi-user.target" ];
         wants = [ "network-online.target" ];
         after = [ "network-online.target" ];
-        unitConfig.ConditionPathExists = "!/home/${user}/.local/bin/claude";
+        unitConfig.ConditionPathExists = "!${home user}/.local/bin/claude";
         path = with pkgs; [ bash curl coreutils gnutar gzip ];
-        environment.HOME = "/home/${user}";
+        environment.HOME = home user;
         serviceConfig = {
           Type = "oneshot";
           User = user;
           ExecStart = "${pkgs.bash}/bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'";
         };
       };
-    }) [ "eldar" "ben" ]);
+    }) [ "eldar" "ben" "quickbeam" ]);
   };
 }

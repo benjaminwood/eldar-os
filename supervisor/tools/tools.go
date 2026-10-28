@@ -98,6 +98,10 @@ type Relay struct {
 	Client     string // the program a stub runs: `<Client> tool <name> "$@"`
 	Socket     string
 	Log        *log.Logger
+	// The sandboxed agent's herdr tab ("workspace/tab"), and herdr's Claude
+	// hook: the agent can't reach herdr's socket (it controls every pane),
+	// so the relay passes its session report on, for that tab's pane only.
+	HerdrTab, HerdrHook string
 
 	mu     sync.Mutex
 	raw    []byte
@@ -228,7 +232,9 @@ func (r *Relay) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	os.Chmod(r.Socket, 0o600)
+	// Owner and group: the socket's directory (setgid) gives it the
+	// sandboxed agent's group, and its mode keeps everyone else out.
+	os.Chmod(r.Socket, 0o660)
 	go func() { <-ctx.Done(); ln.Close() }()
 	r.current() // load the grants and write the stubs now
 	go func() {
@@ -269,6 +275,15 @@ func (r *Relay) handle(ctx context.Context, c *net.UnixConn) {
 	var req Request
 	if err := json.Unmarshal(line, &req); err != nil {
 		fail(2, "tools: bad request")
+		return
+	}
+	if req.Tool == "@herdr-session" {
+		if err := r.reportSession(ctx, br); err != nil {
+			r.Log.Printf("herdr session report: %v", err)
+			fail(1, "herdr session report: %v", err)
+			return
+		}
+		writeFrame(c, &mu, frameExit, []byte("0"))
 		return
 	}
 	if req.Tool == "" { // the list: what's granted, and what each is for
@@ -395,4 +410,68 @@ func Call(socket, tool string, args []string, stdin io.Reader, stdout, stderr io
 			return strconv.Atoi(string(data))
 		}
 	}
+}
+
+// reportSession runs herdr's Claude hook for the sandboxed agent's tab, with
+// the hook input the agent's Claude gave its own SessionStart hook.
+func (r *Relay) reportSession(ctx context.Context, hookInput io.Reader) error {
+	if r.HerdrTab == "" || r.HerdrHook == "" {
+		return errors.New("not configured")
+	}
+	ws, tab, _ := strings.Cut(r.HerdrTab, "/")
+	herdr := func(args ...string) (map[string]any, error) {
+		out, err := exec.CommandContext(ctx, "herdr", args...).Output()
+		if err != nil {
+			return nil, fmt.Errorf("herdr %s: %w", args[0], err)
+		}
+		var v struct {
+			Result map[string]any `json:"result"`
+		}
+		return v.Result, json.Unmarshal(out, &v)
+	}
+	find := func(res map[string]any, key, field, want, id string) string {
+		items, _ := res[key].([]any)
+		for _, x := range items {
+			m, _ := x.(map[string]any)
+			if fmt.Sprint(m[field]) == want {
+				return fmt.Sprint(m[id])
+			}
+		}
+		return ""
+	}
+	res, err := herdr("workspace", "list")
+	if err != nil {
+		return err
+	}
+	wsID := find(res, "workspaces", "label", ws, "workspace_id")
+	if wsID == "" {
+		return fmt.Errorf("no herdr workspace %q", ws)
+	}
+	if res, err = herdr("tab", "list", "--workspace", wsID); err != nil {
+		return err
+	}
+	tabID := find(res, "tabs", "label", tab, "tab_id")
+	if tabID == "" {
+		return fmt.Errorf("no tab %q in %s", tab, ws)
+	}
+	if res, err = herdr("pane", "list", "--workspace", wsID); err != nil {
+		return err
+	}
+	pane := find(res, "panes", "tab_id", tabID, "pane_id")
+	if pane == "" {
+		return fmt.Errorf("no pane in tab %s", tabID)
+	}
+	sock := os.Getenv("HERDR_SOCKET_PATH")
+	if sock == "" {
+		home, _ := os.UserHomeDir()
+		sock = filepath.Join(home, ".config/herdr/herdr.sock")
+	}
+	cmd := exec.CommandContext(ctx, "sh", r.HerdrHook, "session")
+	cmd.Stdin = io.LimitReader(hookInput, 1<<20)
+	cmd.Env = append(os.Environ(), "HERDR_ENV=1", "HERDR_PANE_ID="+pane, "HERDR_SOCKET_PATH="+sock)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+	}
+	r.Log.Printf("passed on the session report for %s (%s)", r.HerdrTab, pane)
+	return nil
 }

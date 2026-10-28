@@ -28,6 +28,8 @@ func runToolsRelay(args []string) {
 	stubs := fs.String("stubs", "", "directory the stubs go in (on the sandbox's PATH)")
 	socket := fs.String("socket", toolsSocket(), "Unix socket to serve")
 	client := fs.String("client", "/run/current-system/sw/bin/supervisor", "program the stubs run")
+	herdrTab := fs.String("herdr-tab", "", "WORKSPACE/TAB of the sandboxed agent, whose session reports to pass on to herdr")
+	herdrHook := fs.String("herdr-hook", "", "herdr's Claude hook script")
 	fs.Parse(args)
 	if *grants == "" {
 		fmt.Fprintln(os.Stderr, "usage: supervisor tools-relay --grants FILE --stubs DIR [--socket PATH]")
@@ -36,7 +38,7 @@ func runToolsRelay(args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	r := &tools.Relay{GrantsPath: *grants, StubDir: *stubs, Client: *client, Socket: *socket,
-		Log: log.New(os.Stderr, "tools: ", 0)}
+		Log: log.New(os.Stderr, "tools: ", 0), HerdrTab: *herdrTab, HerdrHook: *herdrHook}
 	if err := r.Serve(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "supervisor tools-relay:", err)
 		os.Exit(1)
@@ -44,15 +46,19 @@ func runToolsRelay(args []string) {
 }
 
 // runTool: the sandbox's side, what a stub runs. `supervisor tool --list`
-// shows what's granted.
+// shows what's granted; `--herdr-session` passes a Claude SessionStart hook's
+// input to herdr through the relay.
 func runTool(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: supervisor tool NAME [ARGS...] | supervisor tool --list")
 		os.Exit(2)
 	}
 	name, rest := args[0], args[1:]
-	if name == "--list" {
+	switch name {
+	case "--list":
 		name, rest = "", nil
+	case "--herdr-session": // the sandboxed agent's SessionStart hook (input on stdin)
+		name, rest = "@herdr-session", nil
 	}
 	var stdin io.Reader // a terminal isn't passed on, only piped input
 	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice == 0 {
