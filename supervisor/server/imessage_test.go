@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,7 @@ type fakeBlueBubbles struct {
 	mu           sync.Mutex
 	msgs         []map[string]any // the Mac's message history, oldest first
 	noPrivateAPI bool             // the Private API helper isn't connected
+	typing       []string         // "POST <chat>" / "DELETE <chat>"
 	sent         []map[string]any
 	chats        map[string]map[string]any // chat GUID -> chat (with participants)
 }
@@ -50,6 +52,8 @@ func (f *fakeBlueBubbles) handler(t *testing.T) http.Handler {
 				}
 			}
 			data = out
+		case strings.HasSuffix(r.URL.Path, "/typing"):
+			f.typing = append(f.typing, r.Method+" "+strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/chat/"), "/typing"))
 		case strings.HasPrefix(r.URL.Path, "/api/v1/chat/"):
 			c, ok := f.chats[strings.TrimPrefix(r.URL.Path, "/api/v1/chat/")]
 			if !ok {
@@ -336,6 +340,11 @@ func TestIMessageReactToADeliveredMessage(t *testing.T) {
 	if c := react("s1", fmt.Sprintf(`{"messageId":%d,"reaction":"love"}`, id)); c != 200 {
 		t.Fatalf("react: %d", c)
 	}
+	typing := func() []string { bb.mu.Lock(); defer bb.mu.Unlock(); return slices.Clone(bb.typing) }
+	waitFor(t, func() bool { return len(typing()) == 2 }) // shown on arrival, cleared by the reaction
+	if g := typing(); g[0] != "POST iMessage;-;+15555550100" || g[1] != "DELETE iMessage;-;+15555550100" {
+		t.Fatalf("typing %v", g)
+	}
 	if len(bb.sent) != 1 || bb.sent[0]["reaction"] != "love" || bb.sent[0]["chatGuid"] != "iMessage;-;+15555550100" ||
 		bb.sent[0]["selectedMessageGuid"] != "g+15555550100dinner at 6?" {
 		t.Fatalf("sent %+v", bb.sent)
@@ -355,4 +364,55 @@ func TestIMessageReactToADeliveredMessage(t *testing.T) {
 	if len(bb.sent) != 2 {
 		t.Fatalf("refused reactions reached BlueBubbles: %+v", bb.sent)
 	}
+}
+
+func TestIMessageTypingClearsOnReplyOrByItself(t *testing.T) {
+	bb := &fakeBlueBubbles{}
+	s := newIMessageTest(t, bb)
+	h := s.agentHandler()
+	post := func(path, body string) int {
+		req := httptest.NewRequest("POST", path, strings.NewReader(body))
+		req.Header.Set("X-Session-Id", "s1")
+		req.Header.Set("X-Chat-Key", "k")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	got := func() []string {
+		bb.mu.Lock()
+		defer bb.mu.Unlock()
+		return slices.Clone(bb.typing)
+	}
+	chat := "iMessage;-;+15555550100"
+	if c := post("/imessage/typing", `{"to":"+15555550100"}`); c != 200 {
+		t.Fatalf("typing: %d", c)
+	}
+	if c := post("/imessage/send", `{"to":"+15555550100","text":"here you go"}`); c != 200 {
+		t.Fatalf("reply: %d", c)
+	}
+	waitFor(t, func() bool { return len(got()) == 2 })
+	if g := got(); g[0] != "POST "+chat || g[1] != "DELETE "+chat {
+		t.Fatalf("typing calls %v", g)
+	}
+	if c := post("/imessage/typing", `{"to":"+19999999999"}`); c != 403 {
+		t.Fatalf("a stranger's chat: %d", c)
+	}
+	imessageTypingFor = 50 * time.Millisecond
+	t.Cleanup(func() { imessageTypingFor = time.Minute })
+	post("/imessage/typing", `{"to":"+15555550100"}`)
+	waitFor(t, func() bool { return len(got()) == 4 })
+	if g := got(); g[3] != "DELETE "+chat {
+		t.Fatalf("did not clear by itself: %v", g)
+	}
+}
+
+func waitFor(t *testing.T, ok func() bool) {
+	t.Helper()
+	for range 100 {
+		if ok() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting")
 }

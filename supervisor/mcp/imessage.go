@@ -25,6 +25,8 @@ Write like a person texting: plain text (iMessage shows Markdown symbols literal
 
 attachments="N" means the message had N attachments (photos, files) you can't see; say so if it matters.
 
+In a direct chat they see you typing as soon as their message arrives, until you reply or react, so answer every direct message one way or the other. In a group, call typing yourself when you're going to answer and it will take more than a few seconds; your reply clears it. Don't show typing for messages you won't answer.
+
 To react the way a person taps a heart or a thumbs up, use the react tool with the message's message_id; a reaction can stand in for a reply when that's all the message needs.
 
 Use the history tool when you need earlier conversation you no longer have (after a restart, or a message that refers back), and contacts to see whom you can write to.`
@@ -128,7 +130,25 @@ func (ch *channel) imessageServer(version string) *server {
 			}
 			return textResult(fmt.Sprintf("Reacted %v to %v's message.", out["reacted"], out["to"]))
 		}}
-	tools := []tool{reply, react, history, contacts}
+	typing := tool{Name: "typing",
+		Description: "Show \"typing…\" in a group chat while you work on an answer (direct chats show it automatically). Your reply or reaction clears it; it also clears itself after a minute.",
+		Schema: func([]string, string) map[string]any {
+			return object(map[string]any{
+				"to":   map[string]any{"type": "string", "description": "The chat attribute of the message you're answering."},
+				"stop": map[string]any{"type": "boolean", "description": "Clear it, when you decide not to reply after all."},
+			}, "to")
+		},
+		run: func(ctx context.Context, args map[string]any) map[string]any {
+			stop, _ := args["stop"].(bool)
+			if _, err := ch.call(ctx, http.MethodPost, "/imessage/typing", map[string]any{"to": str(args, "to"), "on": !stop}); err != nil {
+				return errorText(err.Error())
+			}
+			if stop {
+				return textResult("Typing indicator cleared.")
+			}
+			return textResult("They see you typing.")
+		}}
+	tools := []tool{reply, react, typing, history, contacts}
 	s := &server{c: ch.c, name: "imessage", version: version, instructions: imessageInstructions, channel: true, tools: map[string]tool{}}
 	for _, t := range tools {
 		s.tools[t.Name] = t

@@ -30,8 +30,8 @@ import (
 //     chats until the agent's `imessage` channel takes them from
 //     GET /imessage/stream. Messages from anywhere else are dropped, and only
 //     their sender is audited.
-//   - Out: POST /imessage/send, POST /imessage/react and GET
-//     /imessage/history, in allowed chats only. The supervisor adds BlueBubbles' password; the agent never sees
+//   - Out: POST /imessage/send, POST /imessage/react, POST /imessage/typing
+//     and GET /imessage/history, in allowed chats only. The supervisor adds BlueBubbles' password; the agent never sees
 //     it.
 //
 // Only the Claude session in the configured herdr workspace and tab may use
@@ -114,7 +114,46 @@ type IMessage struct {
 	chats   map[string]string     // address -> direct chat GUID, as last seen
 	groups  map[string]bbChatInfo // chat GUID -> members, briefly cached
 	lastErr string
-	nudge   chan struct{} // poll now (the webhook)
+	nudge   chan struct{}          // poll now (the webhook)
+	typing  map[string]*time.Timer // chat GUID -> when its typing indicator stops
+}
+
+// imessageTypingFor: how long a typing indicator stays up without a reply.
+var imessageTypingFor = time.Minute
+
+// setTyping shows or clears the typing indicator in a chat (Private API only).
+// Shown, it clears itself after imessageTypingFor unless a reply clears it first.
+func (m *IMessage) setTyping(ctx context.Context, f imessageFile, chat string, on bool) error {
+	m.mu.Lock()
+	if t := m.typing[chat]; t != nil {
+		t.Stop()
+		delete(m.typing, chat)
+	}
+	if on {
+		if m.typing == nil {
+			m.typing = map[string]*time.Timer{}
+		}
+		m.typing[chat] = time.AfterFunc(imessageTypingFor, func() {
+			m.setTyping(context.Background(), f, chat, false)
+		})
+	}
+	m.mu.Unlock()
+	method := http.MethodDelete
+	if on {
+		method = http.MethodPost
+	}
+	_, err := m.call(ctx, f, method, "chat/"+url.PathEscape(chat)+"/typing", nil, nil)
+	return err
+}
+
+// stopTyping clears a chat's typing indicator if one is up (after a reply).
+func (m *IMessage) stopTyping(f imessageFile, chat string) {
+	m.mu.Lock()
+	up := m.typing[chat] != nil
+	m.mu.Unlock()
+	if up {
+		go m.setTyping(context.Background(), f, chat, false)
+	}
 }
 
 func NewIMessage(path, passwordFile, eventsPath, statePath string) *IMessage {
@@ -586,6 +625,12 @@ func (s *Supervisor) pollIMessage(ctx context.Context) error {
 			where = "group with " + strings.Join(names, ", ")
 		}
 		e := m.add(ev)
+		if !e.Group {
+			// A direct message is always answered: show "typing…" at once, until
+			// the reply or a reaction (or a minute). In a group the session
+			// decides, with the typing tool, since it doesn't answer everything.
+			go m.setTyping(context.Background(), f, e.Chat, true)
+		}
 		s.audit.Log(AuditEntry{RequestID: s.nextID(), Action: "imessage from " + c.Name + ": " + truncRunes(e.Text, 200),
 			Decision: "allow", DecisionReason: "allowed chat (" + where + ")", Mode: "normal"})
 	}
@@ -770,6 +815,7 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			return
 		}
 		err = m.sendText(r.Context(), f, chat, text)
+		m.stopTyping(f, chat)
 		decision, reason := "allow", "allowed chat"
 		if err != nil {
 			decision, reason = "error", err.Error()
@@ -781,6 +827,31 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 			return
 		}
 		sendJSON(w, 200, map[string]any{"sent": true, "to": label, "name": label})
+	})
+	// Show (or clear) "typing…" in an allowed chat while the session works on
+	// a reply. Needs BlueBubbles' Private API.
+	mux.HandleFunc("POST /imessage/typing", func(w http.ResponseWriter, r *http.Request) {
+		f, _, status, msg := s.imessageAuth(r, false)
+		if status != 0 {
+			sendJSON(w, status, map[string]any{"error": msg})
+			return
+		}
+		var b struct {
+			To string `json:"to"`
+			On *bool  `json:"on"` // default true
+		}
+		readJSON(r, &b)
+		chat, label, _, err := m.resolveChat(r.Context(), f, b.To)
+		if err != nil {
+			sendJSON(w, 403, map[string]any{"error": err.Error()})
+			return
+		}
+		on := b.On == nil || *b.On
+		if err := m.setTyping(r.Context(), f, chat, on); err != nil {
+			sendJSON(w, 502, map[string]any{"error": err.Error()})
+			return
+		}
+		sendJSON(w, 200, map[string]any{"typing": on, "to": label})
 	})
 	// A tapback on a message the session was given (its message_id), in that
 	// message's chat, which must still be allowed. Needs BlueBubbles' Private API.
@@ -829,6 +900,7 @@ func (s *Supervisor) imessageRoutes(mux *http.ServeMux) {
 		}
 		_, err = m.call(r.Context(), f, http.MethodPost, "message/react", nil,
 			map[string]any{"chatGuid": chat, "selectedMessageGuid": target.GUID, "reaction": reaction, "partIndex": 0})
+		m.stopTyping(f, chat)
 		decision, reason := "allow", "allowed chat"
 		if err != nil {
 			decision, reason = "error", err.Error()
