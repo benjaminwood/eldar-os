@@ -51,6 +51,10 @@
     owner = "supervisor";
     restartUnits = [ "supervisor.service" ];
   };
+  sops.secrets."remote-hosts/mac-bridge" = {
+    owner = "supervisor";
+    restartUnits = [ "supervisor.service" ];
+  };
   sops.secrets.bluebubbles-password = {
     owner = "supervisor";
     restartUnits = [ "supervisor.service" ];
