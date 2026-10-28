@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -22,7 +23,7 @@ import (
 // HostJob is one job for the host agent.
 type HostJob struct {
 	ID        int    `json:"id"`
-	Kind      string `json:"kind"`                // "herdr-focus"
+	Kind      string `json:"kind"`                // "herdr-focus" | "supervisor-tui"
 	Workspace string `json:"workspace,omitempty"` // herdr-focus: workspace label or ID ("" = any)
 	Tab       string `json:"tab,omitempty"`       // herdr-focus: tab label or ID
 }
@@ -199,4 +200,52 @@ func (s *Supervisor) focusHerdrTab(ctx context.Context, which, workspace, tab st
 		return nil
 	}
 	return fmt.Errorf("unknown herdr %q (host or eldar)", which)
+}
+
+// HerdrPane is a pane in a herdr snapshot, with whether its workspace is focused.
+type HerdrPane struct {
+	ID, Tab, Workspace string
+	WorkspaceFocused   bool
+}
+
+// HerdrPanes lists a snapshot's panes, those in the focused workspace first,
+// and returns the focused workspace's ID ("" if none).
+func HerdrPanes(snapshot json.RawMessage) ([]HerdrPane, string, error) {
+	var s herdrSnapshot
+	if err := json.Unmarshal(snapshot, &s); err != nil {
+		return nil, "", fmt.Errorf("herdr snapshot: %w", err)
+	}
+	focused := ""
+	for _, w := range s.Snapshot.Workspaces {
+		if w.Focused {
+			focused = w.ID
+		}
+	}
+	var first, rest []HerdrPane
+	for _, p := range s.Snapshot.Panes {
+		hp := HerdrPane{ID: p.ID, Tab: p.Tab, Workspace: p.Workspace, WorkspaceFocused: p.Workspace == focused}
+		if hp.WorkspaceFocused {
+			first = append(first, hp)
+		} else {
+			rest = append(rest, hp)
+		}
+	}
+	return append(first, rest...), focused, nil
+}
+
+// IsSupervisorTUI reports whether a process's argv is the supervisor TUI:
+// `supervisor` with no subcommand (flags such as --socket are fine), not one
+// of its services (serve, web, host-agent, ...).
+func IsSupervisorTUI(argv []string) bool {
+	if len(argv) == 0 || path.Base(argv[0]) != "supervisor" {
+		return false
+	}
+	return len(argv) == 1 || strings.HasPrefix(argv[1], "-")
+}
+
+// openSupervisorTUI brings up the supervisor TUI in Ben's herdr on the host:
+// the tab whose pane is running it (found by its command, not the tab's
+// name), or a new "supervisor" tab running it if there's none.
+func (s *Supervisor) openSupervisorTUI(ctx context.Context) error {
+	return s.hostAgents.Do(ctx, HostJob{Kind: "supervisor-tui"})
 }

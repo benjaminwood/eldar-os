@@ -99,18 +99,22 @@ request that arrived since isn't answered by mistake.
   token there. Approve is off ("Locked" on the key) while a grant or an
   allow-list entry covers that host, or an agent has a browser window on that
   machine. Deny stays on; an agent denying its own request gains nothing.
-- **Opening a herdr tab.** Holding Approve shows the iTerm hotkey window,
-  selects the iTerm tab connected to a herdr (found by its `ssh` process) and
-  focuses a tab there (`herdr-focus`, always allowed: it only changes what
-  Ben sees). The supervisor focuses tabs in Eldar's VM itself; the host's
-  herdr belongs to Ben's login, which the sandboxed supervisor can't reach, so
-  it hands that job to the host agent (`supervisor host-agent`, a user
-  service of the admin's, `eldar-os.supervisor.hostAgent`). The agent takes
-  jobs over the admin socket and runs only the ones coded into it.
+- **Opening the supervisor TUI.** Holding Approve shows the iTerm hotkey
+  window, selects the iTerm tab connected to the host's herdr (found by its
+  `ssh` process) and brings up the supervisor TUI there: the tab whose pane
+  is running it, found by its command whatever the tab is called, or a new
+  `supervisor` tab running it if there's none (`supervisor-tui`). A device
+  can also focus any herdr tab by name, in Eldar's VM or on the host
+  (`herdr-focus`). Both are always allowed: they only change what Ben sees.
+  The supervisor drives Eldar's VM's herdr itself; the host's belongs to
+  Ben's login, which the sandboxed supervisor can't reach, so it hands those
+  jobs to the host agent (`supervisor host-agent`, a user service of the
+  admin's, `eldar-os.supervisor.hostAgent`). The agent takes jobs over the
+  admin socket and runs only the ones coded into it.
 - **Setup on the Mac.** Copy `streamdeck/com.eldar-os.supervisor.sdPlugin` to
   `~/Library/Application Support/com.elgato.StreamDeck/Plugins/`, write
   `~/Library/Application Support/eldar-os/streamdeck.json` as
-  `{"server": "https://<web UI hostname>.<tailnet>.ts.net", "terminals": {"host": "<ssh destination>", "eldar": "<ssh destination>"}, "approveHold": {"herdr": "host", "tab": "supervisor"}}`
+  `{"server": "https://<web UI hostname>.<tailnet>.ts.net", "terminals": {"host": "<ssh destination>", "eldar": "<ssh destination>"}}`
   (the comment in `bin/plugin.js` explains each), restart the
   Stream Deck app, drag Supervisor → Approve and Deny onto keys, and press
   one to pair.

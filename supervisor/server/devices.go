@@ -56,7 +56,7 @@ type devicesFile struct {
 const pairKind = "device_pair"
 
 // deviceActions is what a device may send.
-var deviceActions = []string{"approve", "deny", "herdr-focus"}
+var deviceActions = []string{"approve", "deny", "herdr-focus", "supervisor-tui"}
 
 func NewDevices(path string, n *Notifier) *Devices {
 	d := &Devices{path: path, n: n, next: 1}
@@ -240,7 +240,8 @@ func (s *Supervisor) deviceView(dev api.Device, browserDriven bool) api.DeviceVi
 
 // DeviceAction runs a press. For approve and deny, ref is the request the
 // device showed, so one that arrived since isn't answered by mistake;
-// herdr-focus takes args herdr (host | eldar), tab and optionally workspace.
+// herdr-focus takes args herdr (host | eldar), tab and optionally workspace;
+// supervisor-tui brings up the supervisor TUI in Ben's herdr on the host.
 func (s *Supervisor) DeviceAction(ctx context.Context, c api.DeviceCaller, action string, ref int, args map[string]string) (int, string) {
 	dev, ok := s.devices.Authenticate(c.Token, c.Node)
 	if !ok {
@@ -249,8 +250,14 @@ func (s *Supervisor) DeviceAction(ctx context.Context, c api.DeviceCaller, actio
 	if !slices.Contains(deviceActions, action) {
 		return 400, fmt.Sprintf("unknown action %q", action)
 	}
-	if action == "herdr-focus" {
-		// Only changes what Ben is looking at, so it's always allowed.
+	// These only change what Ben is looking at, so they're always allowed.
+	switch action {
+	case "supervisor-tui":
+		if err := s.openSupervisorTUI(ctx); err != nil {
+			return 502, err.Error()
+		}
+		return 200, ""
+	case "herdr-focus":
 		if err := s.focusHerdrTab(ctx, args["herdr"], args["workspace"], args["tab"]); err != nil {
 			return 502, err.Error()
 		}

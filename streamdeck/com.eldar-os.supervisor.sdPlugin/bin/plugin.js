@@ -8,21 +8,22 @@
 // agent can act on this machine). No dependencies: it runs on the Node.js the
 // Stream Deck app ships, and talks to the app over a small WebSocket client.
 //
-// Holding Approve (half a second) opens a herdr tab instead: it shows the
-// iTerm hotkey window ("Visor"), selects the iTerm tab connected to that herdr,
-// and asks the supervisor to focus the tab there.
+// Holding Approve (half a second) opens the supervisor TUI instead: it shows
+// the iTerm hotkey window ("Visor"), selects the iTerm tab connected to the
+// host's herdr, and asks the supervisor to focus the tab running the TUI there
+// (or start one).
 //
 // Configuration: ~/Library/Application Support/eldar-os/streamdeck.json:
 //
 //   {"server": "https://supervisor.<tailnet>.ts.net",
-//    "terminals": {"host": "eldar-os", "eldar": "eldar-vm"},
-//    "approveHold": {"herdr": "host", "tab": "supervisor"}}
+//    "terminals": {"host": "eldar-os", "eldar": "eldar-vm"}}
 //
 // terminals maps each herdr the supervisor can steer (host: the supervisor's
 // machine, eldar: Eldar's VM) to the ssh destination of the iTerm tab showing
-// it; approveHold is the tab a long press opens (optionally with a
-// "workspace"). The device token comes from pairing (press a key, approve
-// the pairing in the supervisor) and is kept in the plugin's global settings.
+// it. Optionally, "approveHold": {"herdr": "eldar", "tab": "<name>"} makes the
+// long press open a tab by name instead (with an optional "workspace"). The
+// device token comes from pairing (press a key, approve the pairing in the
+// supervisor) and is kept in the plugin's global settings.
 
 "use strict";
 
@@ -240,18 +241,23 @@ function holdTimer(context) {
   }, HOLD_MS));
 }
 
-// openHerdr asks the supervisor to focus the tab, then brings up the iTerm
-// tab showing that herdr. Focusing is allowed whatever Approve's state.
-async function openHerdr(context, spec) {
-  if (!spec?.herdr || !spec?.tab) throw new Error("no approveHold in the config");
+// openHerdr asks the supervisor to bring up a herdr tab, then the iTerm tab
+// showing that herdr. spec "supervisor" (the default) is the supervisor TUI
+// in the host's herdr, found by its command and started if it isn't running;
+// {herdr, tab, workspace} is a tab by name. Either is allowed whatever
+// Approve's state.
+async function openHerdr(context, spec = "supervisor") {
+  const tui = spec === "supervisor";
+  if (!tui && (!spec?.herdr || !spec?.tab)) throw new Error('approveHold must be "supervisor" or {herdr, tab}');
   if (status !== "live") throw new Error(`not connected (${status})`);
-  const res = await fetch(`${server()}/device/actions/herdr-focus`, {
+  const action = tui ? "supervisor-tui" : "herdr-focus";
+  const res = await fetch(`${server()}/device/actions/${action}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${settings.token}`, "Content-Type": "application/json", "X-Supervisor": "1" },
-    body: JSON.stringify({ args: { herdr: spec.herdr, tab: spec.tab, workspace: spec.workspace || "" } }),
+    body: JSON.stringify(tui ? {} : { args: { herdr: spec.herdr, tab: spec.tab, workspace: spec.workspace || "" } }),
   });
-  const focused = res.ok || (log(`herdr-focus: HTTP ${res.status} ${await res.text()}`), false);
-  await showTerminal(config().terminals?.[spec.herdr]); // even if herdr failed: you'll see why
+  const focused = res.ok || (log(`${action}: HTTP ${res.status} ${await res.text()}`), false);
+  await showTerminal(config().terminals?.[tui ? "host" : spec.herdr]); // even if herdr failed: you'll see why
   send({ event: focused ? "showOk" : "showAlert", context });
 }
 

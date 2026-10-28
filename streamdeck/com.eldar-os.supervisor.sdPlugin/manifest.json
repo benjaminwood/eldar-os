@@ -1,7 +1,7 @@
 {
   "UUID": "com.eldar-os.supervisor",
   "Name": "Supervisor",
-  "Version": "0.2.0.0",
+  "Version": "0.3.0.0",
   "Author": "eldar-os",
   "Description": "Answer the supervisor's approvals from a Stream Deck.",
   "Icon": "imgs/plugin",
@@ -16,7 +16,7 @@
     {
       "UUID": "com.eldar-os.supervisor.approve",
       "Name": "Approve",
-      "Tooltip": "Approve the oldest waiting request; hold to open the supervisor in herdr",
+      "Tooltip": "Approve the oldest waiting request; hold to open the supervisor TUI",
       "Icon": "imgs/actions/approve",
       "Controllers": ["Keypad"],
       "SupportedInMultiActions": false,

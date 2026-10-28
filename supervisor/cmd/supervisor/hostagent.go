@@ -114,8 +114,67 @@ func doHostJob(ctx context.Context, job server.HostJob) error {
 		}
 		_, err = herdrJSON(ctx, "tab", "focus", id)
 		return err
+	case "supervisor-tui":
+		return openSupervisorTUI(ctx)
 	}
 	return fmt.Errorf("unknown job %q", job.Kind)
+}
+
+// openSupervisorTUI focuses the tab whose pane is running the supervisor TUI
+// (by its command, whatever the tab is called), preferring the focused
+// workspace; with none, it opens a "supervisor" tab there and starts it.
+func openSupervisorTUI(ctx context.Context) error {
+	snap, err := herdrJSON(ctx, "api", "snapshot")
+	if err != nil {
+		return err
+	}
+	panes, workspace, err := server.HerdrPanes(snap)
+	if err != nil {
+		return err
+	}
+	for _, p := range panes {
+		raw, err := herdrJSON(ctx, "pane", "process-info", "--pane", p.ID)
+		if err != nil {
+			continue // the pane may have just closed
+		}
+		var info struct {
+			ProcessInfo struct {
+				Foreground []struct {
+					Argv []string `json:"argv"`
+				} `json:"foreground_processes"`
+			} `json:"process_info"`
+		}
+		if json.Unmarshal(raw, &info) != nil {
+			continue
+		}
+		for _, proc := range info.ProcessInfo.Foreground {
+			if server.IsSupervisorTUI(proc.Argv) {
+				_, err := herdrJSON(ctx, "tab", "focus", p.Tab)
+				return err
+			}
+		}
+	}
+	if workspace == "" {
+		if len(panes) == 0 {
+			return errors.New("herdr has no workspace to open the supervisor in")
+		}
+		workspace = panes[0].Workspace
+	}
+	home, _ := os.UserHomeDir()
+	raw, err := herdrJSON(ctx, "tab", "create", "--workspace", workspace, "--label", "supervisor", "--cwd", home, "--focus")
+	if err != nil {
+		return err
+	}
+	var created struct {
+		RootPane struct {
+			PaneID string `json:"pane_id"`
+		} `json:"root_pane"`
+	}
+	if json.Unmarshal(raw, &created) != nil || created.RootPane.PaneID == "" {
+		return errors.New("herdr tab create: no pane in its answer")
+	}
+	_, err = herdrJSON(ctx, "pane", "run", created.RootPane.PaneID, "supervisor")
+	return err
 }
 
 // herdrJSON runs Ben's herdr and returns its JSON result.

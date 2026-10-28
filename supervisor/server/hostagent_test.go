@@ -108,3 +108,31 @@ func TestDeviceHerdrFocusNeedsAgentAndTarget(t *testing.T) {
 		t.Errorf("unpaired device: %d", status)
 	}
 }
+
+func TestIsSupervisorTUI(t *testing.T) {
+	for argv, want := range map[string]bool{
+		"supervisor":                            true,
+		"/run/current-system/sw/bin/supervisor": true,
+		"supervisor --socket /x":                true,
+		"supervisor serve":                      false,
+		"supervisor host-agent":                 false,
+		"supervisor web --socket /x":            false,
+		"zsh":                                   false,
+		"":                                      false,
+	} {
+		if got := IsSupervisorTUI(strings.Fields(argv)); got != want {
+			t.Errorf("IsSupervisorTUI(%q) = %v", argv, got)
+		}
+	}
+}
+
+func TestHerdrPanesFocusedFirst(t *testing.T) {
+	snap := `{"snapshot": {
+	  "workspaces": [{"workspace_id": "w1", "focused": false}, {"workspace_id": "w2", "focused": true}],
+	  "panes": [{"pane_id": "w1:p1", "tab_id": "w1:t1", "workspace_id": "w1"},
+	            {"pane_id": "w2:p1", "tab_id": "w2:t1", "workspace_id": "w2"}]}}`
+	panes, focused, err := HerdrPanes(json.RawMessage(snap))
+	if err != nil || focused != "w2" || len(panes) != 2 || panes[0].ID != "w2:p1" {
+		t.Errorf("HerdrPanes: %v %q %v", panes, focused, err)
+	}
+}
