@@ -53,7 +53,7 @@ func watchTest(t *testing.T, pr map[string]any, compare string) *Supervisor {
 
 func TestWatchAppliedTellsAndRemoves(t *testing.T) {
 	s := watchTest(t, map[string]any{"state": "closed", "merged": true, "merge_commit_sha": "abc", "title": "Add yq"}, "ahead")
-	s.checkWatches("0123456789abcdef", true, "")
+	s.checkWatches("0123456789abcdef", nil, true, "")
 	// The session isn't in herdr here, so the notice goes to Eldar.
 	if len(s.relay.events) != 1 || !strings.Contains(s.relay.events[0].Text, "PR #7 (Add yq) is merged and applied (0123456)") {
 		t.Fatalf("relay: %+v", s.relay.events)
@@ -68,8 +68,8 @@ func TestWatchAppliedTellsAndRemoves(t *testing.T) {
 
 func TestWatchFailedApplyReportsOnceAndKeeps(t *testing.T) {
 	s := watchTest(t, map[string]any{"state": "closed", "merged": true, "merge_commit_sha": "abc", "title": "Add yq"}, "identical")
-	s.checkWatches("0123456789abcdef", false, "rolled back: health check failed")
-	s.checkWatches("0123456789abcdef", false, "rolled back: health check failed")
+	s.checkWatches("0123456789abcdef", nil, false, "rolled back: health check failed")
+	s.checkWatches("0123456789abcdef", nil, false, "rolled back: health check failed")
 	if len(s.relay.events) != 1 || !strings.Contains(s.relay.events[0].Text, "applying 0123456 failed: rolled back") {
 		t.Fatalf("relay: %+v", s.relay.events)
 	}
@@ -80,9 +80,9 @@ func TestWatchFailedApplyReportsOnceAndKeeps(t *testing.T) {
 
 func TestWatchNotYetApplied(t *testing.T) {
 	s := watchTest(t, map[string]any{"state": "open", "merged": false, "title": "Add yq"}, "ahead")
-	s.checkWatches("0123456789abcdef", true, "")
+	s.checkWatches("0123456789abcdef", nil, true, "")
 	s2 := watchTest(t, map[string]any{"state": "closed", "merged": true, "merge_commit_sha": "abc", "title": "x"}, "behind")
-	s2.checkWatches("0123456789abcdef", true, "")
+	s2.checkWatches("0123456789abcdef", nil, true, "")
 	if len(s.relay.events)+len(s2.relay.events) != 0 || len(s.watches.All()) != 1 || len(s2.watches.All()) != 1 {
 		t.Fatal("open PRs and merges not in the revision stay watched, silently")
 	}
@@ -90,8 +90,22 @@ func TestWatchNotYetApplied(t *testing.T) {
 
 func TestWatchClosedUnmerged(t *testing.T) {
 	s := watchTest(t, map[string]any{"state": "closed", "merged": false, "title": "Add yq"}, "")
-	s.checkWatches("0123456789abcdef", true, "")
+	s.checkWatches("0123456789abcdef", nil, true, "")
 	if len(s.relay.events) != 1 || !strings.Contains(s.relay.events[0].Text, "closed without merging") || len(s.watches.All()) != 0 {
 		t.Fatalf("relay: %+v", s.relay.events)
+	}
+}
+
+func TestWatchChecksItsOwnRepoRevision(t *testing.T) {
+	s := watchTest(t, map[string]any{"state": "closed", "merged": true, "merge_commit_sha": "abc", "title": "Add yq"}, "ahead")
+	// An apply that names only another repo leaves the watch alone (no
+	// compare across repos, which GitHub can only answer with a 404).
+	s.checkWatches("0123456789abcdef", map[string]string{"ben/config": "fedcba9876543210"}, true, "")
+	if len(s.relay.events) != 0 || len(s.watches.All()) != 1 {
+		t.Fatalf("other repo's apply: %+v, %d watches", s.relay.events, len(s.watches.All()))
+	}
+	s.checkWatches("0123456789abcdef", map[string]string{"ben/staging": "aaaaaaa1111111", "ben/config": "fedcba9876543210"}, true, "")
+	if len(s.relay.events) != 1 || !strings.Contains(s.relay.events[0].Text, "is merged and applied (aaaaaaa)") {
+		t.Fatalf("its own repo's revision: %+v", s.relay.events)
 	}
 }

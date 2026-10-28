@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -153,27 +154,43 @@ func (s *Supervisor) handleWatchPR(w http.ResponseWriter, r *http.Request) {
 // handleApplied: POST /admin/applied from the apply service, as root.
 func (s *Supervisor) handleApplied(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Rev     string `json:"rev"`
-		Outcome string `json:"outcome"` // applied | failed
-		Detail  string `json:"detail"`
+		Rev     string            `json:"rev"`
+		Revs    map[string]string `json:"revs"` // owner/name -> the revision of that repo applied
+		Outcome string            `json:"outcome"` // applied | failed
+		Detail  string            `json:"detail"`
 	}
 	if err := readJSON(r, &b); err != nil || !validRev.MatchString(b.Rev) {
 		sendJSON(w, 400, map[string]any{"error": "need rev (a commit SHA) and outcome"})
 		return
 	}
-	go s.checkWatches(b.Rev, b.Outcome == "applied", truncRunes(b.Detail, 300))
+	revs := map[string]string{}
+	for repo, rev := range b.Revs {
+		if validRev.MatchString(rev) {
+			revs[strings.ToLower(repo)] = rev
+		}
+	}
+	go s.checkWatches(b.Rev, revs, b.Outcome == "applied", truncRunes(b.Detail, 300))
 	sendJSON(w, 202, map[string]any{"watches": len(s.watches.All())})
 }
 
-func (s *Supervisor) checkWatches(rev string, ok bool, detail string) {
+// checkWatches: revs gives each applied repo's revision; a watch on a repo
+// it doesn't name is left for an apply that does. Without revs (an older
+// apply), every watch is checked against rev.
+func (s *Supervisor) checkWatches(rev string, revs map[string]string, ok bool, detail string) {
 	g := s.cfg.GitHub
 	if !g.configured() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	short := rev[:min(len(rev), 7)]
 	for _, x := range s.watches.All() {
+		rev := rev
+		if len(revs) > 0 {
+			if rev = revs[strings.ToLower(x.Repo)]; rev == "" {
+				continue
+			}
+		}
+		short := rev[:min(len(rev), 7)]
 		var pr prInfo
 		if err := g.get(ctx, fmt.Sprintf("/repos/%s/pulls/%d", x.Repo, x.PR), &pr); err != nil {
 			logf("watch %d: %v", x.ID, err)

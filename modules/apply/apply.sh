@@ -23,12 +23,17 @@ secrets_rev=$(git -C "$SECRETS" rev-parse origin/main)
 # Tell the supervisor how this apply ended, so sessions waiting on a PR in it
 # hear right away (docs/decisions/0012-cycle-time.md). Best effort: the
 # supervisor may be restarting as part of this apply, so wait for its socket.
+# Each repo's revision too (owner/name from its URL): a PR on the secrets repo
+# is checked against the secrets revision, not staging's.
 why="apply failed"
+slug() { local u=${1%.git}; echo "${u#*github.com[:/]}"; }
 report() { # outcome detail
   local sock=${SUPERVISOR_SOCKET:-/run/supervisor/admin.sock}
   for _ in $(seq 60); do [ -S "$sock" ] && break; sleep 0.5; done
   [ -S "$sock" ] || return 0
-  jq -n --arg rev "$rev" --arg outcome "$1" --arg detail "$2" '{$rev, $outcome, $detail}' \
+  jq -n --arg rev "$rev" --arg outcome "$1" --arg detail "$2" \
+      --arg repo "$(slug "$REPO")" --arg secrets "$(slug "$SECRETS_REPO")" --arg secrets_rev "$secrets_rev" \
+      '{$rev, $outcome, $detail, revs: {($repo): $rev, ($secrets): $secrets_rev}}' \
     | curl -s -m 10 --retry 5 --retry-connrefused --retry-delay 1 --unix-socket "$sock" \
         -H 'Content-Type: application/json' --data-binary @- http://supervisor/admin/applied >/dev/null || true
 }
