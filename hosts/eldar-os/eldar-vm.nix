@@ -24,7 +24,9 @@
   eldar-os.eldarVm.config = { pkgs, lib, ... }:
   let
     herdr = pkgs.callPackage ../../packages/herdr.nix { };
-    plannotator-tui = pkgs.callPackage ../../packages/plannotator-tui.nix { };
+    herdr-annotate = pkgs.callPackage ../../packages/herdr-annotate.nix { };
+    # The release binary herdr-annotate ships, under its own name for the PATH.
+    plannotator-tui = pkgs.runCommand "plannotator-tui" { } "mkdir -p $out/bin; ln -s ${herdr-annotate}/bin/plannotator-tui.exe $out/bin/plannotator-tui";
     # Eldar's two channels (supervisor/mcp): Ben's chat, and notify_ben events
     # from other agents, scripts and cron. Only Eldar's session loads them.
     channels = pkgs.writeText "eldar-channels.mcp.json" (builtins.toJSON {
@@ -286,7 +288,7 @@
         ExecStart = pkgs.writeShellScript "herdr-plugins" ''
           set -e
           for _ in $(seq 100); do herdr plugin list >/dev/null 2>&1 && break; sleep 0.2; done
-          herdr plugin link ${pkgs.callPackage ../../packages/herdr-annotate.nix { inherit plannotator-tui; }} >/dev/null
+          herdr plugin link ${herdr-annotate} >/dev/null
         '';
       };
     };
