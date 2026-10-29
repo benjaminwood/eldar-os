@@ -246,6 +246,11 @@
     # *.test goes to that DNS server (127.0.0.1); every other name resolves as before.
     services.resolved.settings.Resolve = { DNS = [ "127.0.0.1" ]; Domains = [ "~test" ]; };
 
+    # The VM's disks are sparse files on the host, which only gets space back when the VM trims.
+    # Dev stacks write and delete tens of GB a day (node_modules installs), more than a weekly trim
+    # keeps up with, so the host's disk fills while the VM's looks fine. A trim takes seconds.
+    services.fstrim.interval = "hourly";
+
     # herdr, Eldar's terminal workspace manager: the server runs as eldar
     # (lingering, so with no one logged in), and there's always a "primary"
     # workspace to start sessions in. The supervisor drives it for Ben's UIs.
