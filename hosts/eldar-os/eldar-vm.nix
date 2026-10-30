@@ -247,9 +247,11 @@
     services.resolved.settings.Resolve = { DNS = [ "127.0.0.1" ]; Domains = [ "~test" ]; };
 
     # The VM's disks are sparse files on the host, which only gets space back when the VM trims.
-    # Dev stacks write and delete tens of GB a day (node_modules installs), more than a weekly trim
-    # keeps up with, so the host's disk fills while the VM's looks fine. A trim takes seconds.
-    services.fstrim.interval = "hourly";
+    # Dev stacks (installs, builds, test runs) write and delete as much as 80 GB an hour, so the
+    # host's disk fills while the VM's looks fine. Trim every 15 minutes, on time (the default
+    # timer adds up to 100 minutes of random delay); a trim takes seconds.
+    services.fstrim.interval = "*:0/15";
+    systemd.timers.fstrim.timerConfig = { RandomizedDelaySec = 0; AccuracySec = "1min"; };
 
     # herdr, Eldar's terminal workspace manager: the server runs as eldar
     # (lingering, so with no one logged in), and there's always a "primary"
