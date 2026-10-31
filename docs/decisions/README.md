@@ -23,4 +23,4 @@ the old one *Superseded by NNNN*. Don't rewrite history.
 | [0012](0012-cycle-time.md) | An agent waits only for Ben's approval | Accepted |
 | [0013](0013-approvals-and-grants.md) | Each credentialed command is approved on its own, until Ben grants more | Accepted |
 | [0014](0014-host-docker.md) | Household services run in rootful Docker on the host | Accepted |
-| [0015](0015-ambient-credentials.md) | Ambient credentials come from the supervisor, by directory and owner | Accepted |
+| [0015](0015-ambient-credentials.md) | Agents have their own credentials, always available and never privileged | Accepted |

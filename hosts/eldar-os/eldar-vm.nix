@@ -97,8 +97,10 @@
         export PATH=${state}/.local/bin:/run/wrappers/bin:/run/current-system/sw/bin
         export LANG=C.UTF-8 COLORTERM=truecolor
         install -d -m 700 ${config} ${state}/tmp
-        # Its repo (identity and memory), private: cloning it needs access.
-        [ -d ${repo}/.git ] || git clone -q https://github.com/example/quickbeam ${repo} || install -d ${repo}
+        # Its repo (identity and memory) is private, so it's cloned here by hand,
+        # with the commit identity in the clone's own git config (quickbeam-sync).
+        # Without it, Quickbeam starts in an empty directory.
+        install -d ${repo}
         cd ${repo}
         f=${config}/.claude.json; [ -s "$f" ] || echo '{}' > "$f"
         jq '.projects["${repo}"].hasTrustDialogAccepted = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
@@ -450,7 +452,8 @@
         script = ''
           cd ${quickbeam.repo} 2>/dev/null || exit 0
           git add -A
-          git diff --cached --quiet || git -c user.name=Quickbeam -c user.email=quickbeam@localhost commit -q -m "Quickbeam's notes"
+          # As the identity in the repo's own config (user.name, user.email).
+          git diff --cached --quiet || git commit -q -m "Quickbeam's notes"
           # Pushing needs GitHub access to the repo; until then the notes stay local.
           git pull -q --rebase && git push -q || echo "not pushed (no access to the repo from here)"
         '';

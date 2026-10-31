@@ -38,7 +38,7 @@ import (
 // any of it, with its channel's pinned key. A private file names the server,
 // that tab and the contacts (re-read on every use, so edits apply at once):
 //
-//	server: http://192.168.1.27:1234
+//	server: http://mac.local:1234
 //	session: { workspace: primary, tab: Family }
 //	contacts:
 //	  - { name: Ben, address: "+15555550100" }   # a phone number or an Apple ID email

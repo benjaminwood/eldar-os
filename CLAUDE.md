@@ -22,6 +22,9 @@ published eventually, in full, so treat every commit as public. So:
   beyond what the config strictly needs.
 - **Machine-specific facts** (disk serial, hardware, hostname, public SSH keys)
   are fine but kept together and clearly marked, so a fork knows what to change.
+- **Example people are made up.** When tests, docs or demo data need a family
+  member or contact, it's **Sam** (not a real person), with 555 phone numbers
+  and `example.com` addresses. Never a real family member's name or details.
 - **Write for a stranger.** Comments and docs explain why, in terms someone
   without our history can follow. No references to private conversations.
 - When something personal must exist for the system to work, it lives outside
