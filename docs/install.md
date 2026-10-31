@@ -280,11 +280,28 @@ scripts/apply             # push; the machine verifies, applies, health-checks (
 The bootloader is at the firmware's fallback path (`\EFI\BOOT\BOOTX64.EFI`) on
 the 500GB disk's own ESP; no NVRAM entry is written. Pick the 970 EVO 500GB
 from the firmware boot menu. There's no key disk there, so after 5 s the initrd
-asks for Ben's passphrase. The Ubuntu disk and its ESP are untouched.
+asks for Ben's passphrase.
 
-Ubuntu's root is then mounted read-only at `/mnt/ubuntu`
-(`hosts/eldar-os/ubuntu-disk.nix`). Its LUKS partition has an extra keyslot
-for the sops secret `ubuntu-disk-key`, added once from Ubuntu with
-`sudo cryptsetup luksAddKey <the 1TB disk's by-id path>-part3 <key file>`; the
-passphrase still unlocks it. In the VM the drive is absent and the mount is
-skipped.
+## The data disk
+
+The 1TB drive held the previous Ubuntu install, which steps 11 and 12 read
+from (it was mounted read-only at `/mnt/ubuntu` then). Once everything worth
+keeping was copied off, it became the data disk (`hosts/eldar-os/data-disk.nix`):
+one LUKS2 partition around XFS, mounted at `/data`, unlocked at boot by the
+sops secret `data-disk-key`. Formatted once, by serial, from the running
+system (the key is generated into RAM, never printed):
+
+```bash
+T=/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_1TB_S5H9NG0N204821J
+K=/run/user/$UID/datadisk/key
+install -d -m 700 ${K%/*}; (umask 077; tr -dc A-Za-z0-9 </dev/urandom | head -c 64 >$K)
+sudo wipefs -a $T-part*; sudo wipefs -a $T; sudo blkdiscard -f $T
+sudo sgdisk --zap-all $T; sudo sgdisk -n1:0:0 -t1:8309 -c1:eldar-data $T
+sudo cryptsetup luksFormat --batch-mode --type luks2 --label eldar-data --key-file $K $T-part1
+sudo cryptsetup open --allow-discards --key-file $K $T-part1 data
+sudo mkfs.xfs -L eldar-data /dev/mapper/data
+# in eldar-os-secrets: store it, then back it up to the admin's 1Password vault
+jq -Rs . <$K | sops set --value-stdin eldar-os.yaml '["data-disk-key"]'
+```
+
+In the VM the drive is absent and the mount is skipped.

@@ -8,7 +8,7 @@
     ./eldar-vm.nix
     ./supervisor.nix
     ./tailscale.nix
-    ./ubuntu-disk.nix
+    ./data-disk.nix
     ./docker.nix
     ./home-assistant.nix
     ./atuin.nix
