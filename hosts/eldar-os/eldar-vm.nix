@@ -20,6 +20,9 @@
     args = [ "-y" "@playwright/mcp@0.0.83" "--cdp-endpoint" "http://127.0.0.1:19222" "--viewport-size" "1280,800" ];
   };
   eldar-os.eldarVm.memMiB = 49152;
+  # Eldar's disks are on the data disk (data-disk.nix), with room for its dev stacks.
+  eldar-os.eldarVm.imageDir = "/data/microvms/eldar";
+  eldar-os.eldarVm.homeMiB = 870400; # 850 GiB
 
   eldar-os.eldarVm.config = { pkgs, lib, ... }:
   let

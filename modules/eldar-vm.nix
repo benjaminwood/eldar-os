@@ -108,6 +108,20 @@ in
         be most of the machine; leave headroom for the host itself.
       '';
     };
+    imageDir = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/microvms/eldar";
+      description = ''
+        Where the VM's disk images (home.img, root.img) live on the host. Off the
+        default, it's usually another drive's mount: the VM then won't start
+        without that mount, rather than create fresh, empty images under it.
+      '';
+    };
+    homeMiB = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 358400;
+      description = "Size of the VM's /home disk (sparse: it only takes what it holds). Grow it as the volumes comment says.";
+    };
   };
 
   config = {
@@ -251,6 +265,7 @@ in
   # Machines without (nested) KVM, e.g. some CI runners, skip the VM rather
   # than fail.
   systemd.services."microvm@eldar".unitConfig.ConditionPathExists = "/dev/kvm";
+  systemd.services."microvm@eldar".unitConfig.RequiresMountsFor = [ cfg.imageDir ];
 
   # --- the VM -----------------------------------------------------------------
 
@@ -270,18 +285,18 @@ in
         { proto = "virtiofs"; tag = "workspace"; source = workspace; mountPoint = "/home/eldar/workspace"; posixAcl = false; }
         { proto = "virtiofs"; tag = "host-ssh"; source = vmSsh; mountPoint = "/etc/ssh/from-host"; posixAcl = false; readOnly = true; }
       ];
-      # Relative images live in /var/lib/microvms/eldar on the host. Sparse:
+      # Images live in cfg.imageDir on the host. Sparse:
       # they only take space as they fill. Rootless Docker's data lives in
       # eldar's home. The root is a disk too, not microvm.nix's default
       # tmpfs: agents write gigabytes to /tmp, and in RAM that starved the
       # VM of memory.
-      # `size` only applies when an image is created. To grow one: raise it
-      # here, grow the file on the host (`truncate -s <size>M`, as microvm);
+      # `size` only applies when an image is created. To grow /home: raise
+      # homeMiB, grow the file on the host (`truncate -s <size>M`, as microvm);
       # the VM sees the new size from its next restart, and /home grows to
       # fill it then (autoResize below).
       volumes = [
-        { image = "home.img"; mountPoint = "/home"; size = 358400; }
-        { image = "root.img"; label = "root"; mountPoint = "/"; size = 65536; } # found by label
+        { image = "${cfg.imageDir}/home.img"; mountPoint = "/home"; size = cfg.homeMiB; }
+        { image = "${cfg.imageDir}/root.img"; label = "root"; mountPoint = "/"; size = 65536; } # found by label
       ];
       # `nix shell` / `nix profile install` inside the VM land in a writable
       # layer over the host's read-only store, on the root disk. Permanent
