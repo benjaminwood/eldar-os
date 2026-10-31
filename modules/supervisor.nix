@@ -123,7 +123,7 @@ in
         allowFrom = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
-          description = "Addresses of the BlueBubbles server(s): the only ones the firewall lets reach the port.";
+          description = "Addresses or networks (CIDR) the firewall lets reach the port: the BlueBubbles server's, or its LAN.";
         };
       };
     };
