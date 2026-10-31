@@ -103,7 +103,9 @@ echo "publishing $count commit(s), reviewed up to $short:"
 git log --oneline "$range"
 
 echo; echo "scanning with gitleaks…"
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS" \
+# Docker here is rootful (decision 0014): without access to its socket, sudo.
+docker=docker; docker info >/dev/null 2>&1 || docker="sudo docker"
+$docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS" \
   git --no-banner --redact --log-opts="$range" /repo
 
 git push public "$target:refs/heads/main"
